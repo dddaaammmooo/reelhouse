@@ -62,6 +62,7 @@ cp .env.example .env
 | `SONARR_URL`, `RADARR_URL`, `LIDARR_URL` | Server addresses, e.g. `http://192.168.1.20:8989`. Use IP addresses for the TV: most Samsung TVs can't resolve `.local` names. |
 | `SONARR_API_KEY`, `RADARR_API_KEY`, `LIDARR_API_KEY` | Each app's **Settings › General › Security › API Key**. |
 | `SONARR_QUALITY_PROFILE`, `RADARR_QUALITY_PROFILE`, `LIDARR_QUALITY_PROFILE` | Quality profile name used for new downloads. Empty means the app's first profile (Lidarr: the root folder's default). Can be changed later in the app's Settings. |
+| `TMDB_TOKEN` | Optional. A TMDb **API Read Access Token** (themoviedb.org › Settings › API) for more actor photos in the banner. |
 | `PLEX_URL`, `PLEX_TOKEN` | Optional. Your Plex server and the **server owner's** token, for the built-in player, Play In Plex, Recently played and theme music. ([Finding a token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)) |
 
 `.env` is read in two places: the Docker container (for browser testing) and `build-tv.ps1` (baked into the TV package). The repository's `js/config.js` only holds placeholders and is never modified.

@@ -645,7 +645,8 @@ The player menu has a **Subtitle timing** section while subtitles are on. It's a
 
 When a person is in the banner (Actors screen, Cast pages, an actor's page), their main photo shows first, as before. If more photos are found, a slow filmstrip of them fades in across the **whole banner width** and drifts right to left (`personStrip` / `showStrip` in app.js, `#hero-strip`). The strip sits above `.hero-scrim` and has its own lighter scrim (`.hero-strip::after`), so the photos show right across while the text stays readable.
 
-- **Photos** (`People.gallery(item)`, saved 30 days as `g3:<qid>`, up to 8 candidates, the main photo first), most varied first:
+- **Photos** (`People.gallery(item)`, saved 30 days as `g4:<qid>`, up to 10 candidates, the main photo first), most varied first:
+  0. with the optional `TMDB_TOKEN` (`MEDIALOADER_TMDB.token`, from `.env` via build-tv.ps1 / the Docker config script): TMDb's photo gallery (`/3/person/{id}/images`, bearer token, best rated first, at most 5 up front). It's rich for well-known actors (Ranbir Kapoor: 17) and often only the main photo for others;
   1. every Wikidata portrait (P18; `fromEntity` keeps them all as `images`, plus the Commons category P373 as `category`);
   2. **TVmaze character images**: a photo of them in each role (`/people/{id}/castcredits?embed=character`). This is the best source for TV actors, who often have one photo or none on Wikimedia (Alberta Watson: none on Commons, three roles on TVmaze);
   3. pictures in their Wikipedia article (`/page/media-list`, including screenshots that aren't on Commons), at the largest size offered;
@@ -677,11 +678,16 @@ Workflows in `.github/workflows/` (repo `dddaaammmooo/reelhouse`):
 | `dependency-review.yml` | PRs | Blocks new dependencies with high-severity advisories |
 | `secret-scan.yml` | push, PRs, weekly | gitleaks over the full history (API keys, Plex tokens) |
 | `scorecard.yml` | push, weekly | OpenSSF Scorecard, results in code scanning |
+| `tv-package.yml` | called by release-please; or by hand | Installs the Tizen Studio 6.1 CLI (installer pinned by SHA-256), signs `Reelhouse.wgt` with the owner's Samsung certificate from secrets (`tools/package-tv.sh`) and attaches it to the release (by hand: a 14-day build artifact). No keys or tokens in the package. |
 | `release-please.yml` | push to main | Release PR from conventional commits; merging it tags `vX.Y.Z`, writes `CHANGELOG.md`, bumps `package.json` and `config.xml`'s `version` (xml updater, `release-please-config.json`), and attaches an unsigned zip of the app files |
 
 - Dependabot (`.github/dependabot.yml`) updates npm and Actions weekly.
 - **Commit messages must be conventional** (`feat:`, `fix:`, `feat!:` …) or release-please ignores them. The first public commit is tagged `v1.1.0` to match `.release-please-manifest.json`.
-- Releases can't be signed in CI (the Samsung certificate is tied to the owner's account and TV DUID); install with `build-tv.ps1` locally.
+- **Signed releases:** secrets `TIZEN_AUTHOR_P12` / `TIZEN_DISTRIBUTOR_P12` (base64 of the files in `%USERPROFILE%\SamsungCertificate\MediaLoader\`) and `TIZEN_AUTHOR_PASSWORD` / `TIZEN_DISTRIBUTOR_PASSWORD`.
+  - The passwords must be entered by the owner: Tizen Studio keeps them encrypted in `.pwd` files that can't be read back.
+  - `tizen security-profiles add` can't save passwords on a headless runner (no keyring; packaging then fails with "Invaild password"), so `package-tv.sh` writes `profiles.xml` itself.
+  - The package only installs on the DUIDs in the distributor certificate and carries no API keys (release files are public); `build-tv.ps1` is still the way to install with `.env` baked in.
+  - Verified in an Ubuntu 24.04 container with a throwaway certificate.
 - Local check before pushing: `docker run --rm -v "<repo>:/repo" zricethezav/gitleaks:latest dir /repo` (with `MSYS_NO_PATHCONV=1` in Git Bash). Only `.env` and `.buildResult/` should be flagged, and both are git-ignored. Delete any report file afterwards, because it contains the secrets.
 - `SECURITY.md` points reporters to private advisories.
 

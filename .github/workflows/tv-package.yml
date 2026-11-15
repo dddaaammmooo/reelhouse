@@ -1,0 +1,81 @@
+name: TV package
+
+# Signs and packages Reelhouse.wgt with the owner's Samsung certificate (repository secrets), so it can be
+# installed with `tizen install` / sdb without Tizen Studio's certificate setup. Called by the release workflow
+# (the .wgt is attached to the GitHub release); run it by hand from the Actions tab for a build artifact.
+#
+# The package holds no API keys or tokens (they'd be public in a release): enter them on the TV in Settings, or
+# use build-tv.ps1, which bakes in .env. Samsung packages only install on the TVs (DUIDs) listed in the
+# distributor certificate.
+#
+# Secrets: TIZEN_AUTHOR_P12 / TIZEN_DISTRIBUTOR_P12 (the .p12 files, base64) and TIZEN_AUTHOR_PASSWORD /
+# TIZEN_DISTRIBUTOR_PASSWORD.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to attach the package to
+        type: string
+        required: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write          # gh release upload
+    env:
+      TAG: ${{ inputs.tag }}
+      # Tizen Studio 6.1 CLI for Linux; download.tizen.org publishes no checksum, so it's pinned here.
+      TIZEN_CLI_URL: https://download.tizen.org/sdk/Installer/tizen-studio_6.1/web-cli_Tizen_Studio_6.1_ubuntu-64.bin
+      TIZEN_CLI_SHA256: 7f33fe09eda4eb5d50463cf997e8f676d455060720470070ae1932994413aaf4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          persist-credentials: false
+
+      - name: Install the Tizen Studio CLI
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/web-cli.bin" "$TIZEN_CLI_URL"
+          echo "$TIZEN_CLI_SHA256  $RUNNER_TEMP/web-cli.bin" | sha256sum -c
+          chmod +x "$RUNNER_TEMP/web-cli.bin"
+          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/tizen-install.log" 2>&1 \
+            || { tail -40 "$RUNNER_TEMP/tizen-install.log"; exit 1; }
+
+      - name: Sign and package
+        env:
+          AUTHOR_P12_B64: ${{ secrets.TIZEN_AUTHOR_P12 }}
+          DISTRIBUTOR_P12_B64: ${{ secrets.TIZEN_DISTRIBUTOR_P12 }}
+          AUTHOR_PASSWORD: ${{ secrets.TIZEN_AUTHOR_PASSWORD }}
+          DISTRIBUTOR_PASSWORD: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
+        run: |
+          for v in AUTHOR_P12_B64 DISTRIBUTOR_P12_B64 AUTHOR_PASSWORD DISTRIBUTOR_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Missing repository secret for $v (see the comment at the top of tv-package.yml)"; exit 1; fi
+          done
+          umask 077
+          certs="$RUNNER_TEMP/certs"; mkdir -p "$certs"
+          printf '%s' "$AUTHOR_P12_B64" | base64 -d > "$certs/author.p12"
+          printf '%s' "$DISTRIBUTOR_P12_B64" | base64 -d > "$certs/distributor.p12"
+          AUTHOR_P12="$certs/author.p12" DISTRIBUTOR_P12="$certs/distributor.p12" bash tools/package-tv.sh dist
+          version="${TAG:-$(git rev-parse --short HEAD)}"
+          mv dist/Reelhouse.wgt "dist/reelhouse-$version.wgt"
+          rm -rf "$certs" "$HOME/tizen-studio-data/profile/profiles.xml"
+          ls -l dist
+
+      - name: Attach to the release
+        if: ${{ inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.wgt --clobber
+
+      - name: Keep as a build artifact
+        if: ${{ inputs.tag == '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reelhouse-wgt
+          path: dist/*.wgt
+          retention-days: 14
