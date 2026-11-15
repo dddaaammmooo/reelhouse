@@ -42,9 +42,6 @@ var Player = (function () {
         { id: '4000', label: '4 Mbps · 720p', res: '1280x720' },
         { id: '2000', label: '2 Mbps · 480p', res: '720x480' }
     ];
-    // Playback speeds (menu › Playback speed). Kept for the session, including restarts for quality / audio changes.
-    const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
-    const speedLabel = r => (r === 1 ? 'Normal' : r + '×');
     const SUB_SIZES = [{ id: 'small', label: 'Small' }, { id: 'normal', label: 'Normal' }, { id: 'large', label: 'Large' }];
     let prefs = { quality: 'original', subSize: 'normal', autoNext: true, skipIntro: true, skipCredits: true };
     try { prefs = Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch (e) { /* defaults */ }
@@ -81,10 +78,7 @@ var Player = (function () {
     function avEngine() {
         const av = avplay();
         const on = {};
-        let dur = 0, cur = 0, rate = 1;
-        // AVPlay's setSpeed is documented mostly for fast-forward; it can reset after a pause or seek, so it's put
-        // back then. False if this TV refuses the speed.
-        const setRate = r => { try { av.setSpeed(r); rate = r; return true; } catch (e) { return false; } };
+        let dur = 0, cur = 0;
         return {
             name: 'avplay', on,
             load(url, startMs) {
@@ -110,13 +104,10 @@ var Player = (function () {
                     }, e => reject(new Error('Can’t play this file (' + e + ')')));
                 });
             },
-            play() { try { av.play(); if (rate !== 1) { setRate(rate); } } catch (e) { /* not ready */ } },
+            play() { try { av.play(); } catch (e) { /* not ready */ } },
             pause() { try { av.pause(); } catch (e) { /* not ready */ } },
             paused() { try { return av.getState() === 'PAUSED'; } catch (e) { return false; } },
-            seek(ms) {
-                try { av.seekTo(Math.max(0, Math.round(ms)), () => { if (rate !== 1) { setRate(rate); } }, () => {}); cur = ms; } catch (e) { /* ignore */ }
-            },
-            rate: setRate,
+            seek(ms) { try { av.seekTo(Math.max(0, Math.round(ms)), () => {}, () => {}); cur = ms; } catch (e) { /* ignore */ } },
             time() { try { return av.getCurrentTime() || cur; } catch (e) { return cur; } },
             duration() { return dur; },
             stop() { try { av.stop(); } catch (e) { /* */ } try { av.close(); } catch (e) { /* */ } },
@@ -157,7 +148,6 @@ var Player = (function () {
             pause() { v.pause(); },
             paused() { return v.paused; },
             seek(ms) { v.currentTime = Math.max(0, ms / 1000); },
-            rate(r) { v.playbackRate = r; return true; },           // the pitch stays natural (preservesPitch)
             time() { return (v.currentTime || 0) * 1000; },
             duration() { return isFinite(v.duration) ? v.duration * 1000 : 0; },
             stop() { v.pause(); v.removeAttribute('src'); try { v.load(); } catch (e) { /* */ } },
@@ -392,7 +382,6 @@ var Player = (function () {
             applySubtitles();
             if (S.subOffset) { setSubOffset(S.subOffset); }       // keep the chosen timing after a restart
             applyAudio();
-            if (S.speed && S.speed !== 1) { setSpeed(S.speed); }   // keep the chosen speed after a restart
             tick();
             clearInterval(tickTimer); tickTimer = setInterval(tick, 500);
             clearInterval(timelineTimer); timelineTimer = setInterval(() => timeline(S.engine.paused() ? 'paused' : 'playing'), 10000);
@@ -730,9 +719,6 @@ var Player = (function () {
         }
         head('Subtitle size');
         SUB_SIZES.forEach(z => items.push({ label: z.label, on: prefs.subSize === z.id, act: () => { prefs.subSize = z.id; savePrefs(); $('pl-subs').className = 'pl-subs ' + z.id; } }));
-        head('Playback speed');
-        SPEEDS.forEach(r => items.push({ label: speedLabel(r), on: (S.speed || 1) === r, act: () => setSpeed(r) }));
-        if (S.speedRefused) { items.push({ info: true, label: 'This TV can’t play at ' + speedLabel(S.speedRefused) }); }
         head('Quality');
         QUALITIES.forEach(q => items.push({ label: q.label, on: prefs.quality === q.id, act: () => { prefs.quality = q.id; savePrefs(); restartHere(); } }));
         if (S.meta.type === 'episode') {
@@ -801,15 +787,6 @@ var Player = (function () {
         S.menu.items = menuItems();
         S.menu.i = keep;
         drawMenu();
-    }
-
-    // Playback speed: falls back to normal (and says so in the menu) when the TV refuses one.
-    function setSpeed(r) {
-        const ok = S.engine.rate ? S.engine.rate(r) : false;
-        if (ok) { S.speed = r; S.speedRefused = null; return; }
-        S.speedRefused = r;
-        S.speed = 1;
-        if (S.engine.rate) { S.engine.rate(1); }
     }
 
     // Audio: AVPlay switches tracks of a directly played file instantly; otherwise restart where we are.

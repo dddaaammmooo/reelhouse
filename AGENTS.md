@@ -669,11 +669,12 @@ When a person is in the banner (Actors screen, Cast pages, an actor's page), the
 
 ## Player speed, theme loop, picture picker, fixes (15 Nov 2026)
 
-- **Playback speed** (player menu › Playback speed: Normal, 1.25×, 1.5×, 1.75×, 2×; the menu button is now "Options"):
-  - engines have `rate(r)` returning whether it took: HTML5 sets `playbackRate` (pitch kept); AVPlay calls `setSpeed` and re-applies it after a pause or seek;
-  - a refused speed falls back to Normal with "This TV can't play at 2×" in the menu;
-  - `S.speed` is kept across restarts in the same session (quality / audio / subtitle changes).
-  - **Not yet tried on the TV.** Samsung documents `setSpeed` mainly for trick play; some models may refuse 1.25/1.5/1.75 or mute the sound above 1×.
+- **No playback speed** (tried and removed, 15 Nov 2026). On the 2019 TV nothing plays at other speeds with sound:
+  - AVPlay's `setSpeed` is trick play, which mutes the audio at any rate other than 1×;
+  - the TV's HTML5 `<video>` didn't play in the probe;
+  - the browser's MSE pipeline (hls.js) slows down instead: 1.5× gave 0.92 s of media per second, 2× gave 0.41 s.
+
+  The only route left is separate, time-stretched audio in JavaScript synced to silent video. The player menu button is still called "Options".
 - **Theme music loops:** on `ended` it restarts and eases over 2 s to 10% less of its starting level (`THEME_STEP`): 90%, 80%… and stops after the tenth loop. Checked in a browser: 0.225 → 0.203 → 0.18 … 0.022 → stopped.
 - **Picture picker "Original":** the first card is the title's own poster (often TheTVDB via Sonarr or the feed, not TVmaze); choosing it deletes the saved choice. `chooseArt` no longer overwrites `item.view.poster`; `chosenArt` applies the choice where pictures are drawn.
 - **No YouTube category:** `channelOf` / `webChannel` in feeds.js ignore TVmaze's "YouTube" web channel, so there's no YouTube streaming row or Publisher tile (`STORE_VERSION` 10).
