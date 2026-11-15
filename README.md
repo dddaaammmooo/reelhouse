@@ -185,6 +185,13 @@ Reelhouse then appears at the end of the TV's **Apps** list. Run the same comman
 
 If PowerShell refuses to run the script, allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
+**On Linux (or macOS):** `./build-tv.sh <tv-ip>` does the same (`--no-install` only builds). It needs:
+- the Tizen Studio command-line tools in `~/tizen-studio` (the `web-cli` installer is enough, no sudo needed);
+- a JDK 11 or newer, found as `~/.local/jdk-17/bin/java`, `$JAVA` or `java`;
+- your certificates copied to `~/SamsungCertificate/MediaLoader/` (`author.p12`, `distributor.p12`).
+
+It asks for the certificate passwords, or reads `TIZEN_AUTHOR_PASSWORD` / `TIZEN_DISTRIBUTOR_PASSWORD` from `.env`. The TV must have this computer's IP as its Developer Mode **Host PC IP**.
+
 **From a GitHub release:** each release has two downloads.
 
 - `reelhouse-vX.Y.Z.wgt` is signed with the repository owner's Samsung certificate, so it only installs on the TVs listed in that certificate. Install it with `tizen.bat install -n reelhouse-vX.Y.Z.wgt -s <tv-ip>:26101 -- <folder>`. It contains no server addresses or keys, so enter them on the TV in **Settings**.
@@ -236,6 +243,6 @@ Then open `http://127.0.0.1:9333/json` and open the listed `devtoolsFrontendUrl`
 | `js/` | The app: navigation, *arr and Plex clients, feeds, people, seasons, player, sounds, screens |
 | `tests/` | Unit tests and the mock media world |
 | `docker/`, `Dockerfile`, `docker-compose.yml` | Local test server with feed proxies |
-| `build-tv.ps1` | Sign, package and install on a TV |
+| `build-tv.ps1`, `build-tv.sh` | Sign, package and install on a TV (Windows / Linux) |
 | `tools/` | Icon generator |
 | `AGENTS.md` | Detailed developer notes: architecture, constraints, how each feature works |

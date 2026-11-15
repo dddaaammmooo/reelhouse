@@ -8,3 +8,6 @@ LOCAL.md
 *.wgt
 node_modules/
 coverage/
+
+# Empty log file the Tizen CLI creates in the folder it runs from
+${sys:installerLogFileName}

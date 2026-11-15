@@ -179,6 +179,7 @@ Re-installing over an existing install keeps the app's localStorage (settings, c
 | `docker/*`, `Dockerfile`, `docker-compose.yml`, `.env.example` | Local test container (see above) |
 
 | `build-tv.ps1` | TV packaging/install script (PowerShell 5.1) |
+| `build-tv.sh` | The same for Linux: stages, bakes `.env`, signs through `tools/package-tv.sh` (`APP_DIR`, `JAVA`), installs with `sdb`. Set up on the owner's Linux machine with the Tizen CLI in `~/tizen-studio` and Temurin 17 in `~/.local/jdk-17`, both installed without sudo. |
 | `README.md` | User docs |
 
 Script load order matters (globals): `webapis.js (TV only) → config.js → sounds.js → nav.js → api.js → feeds.js → people.js → seasons.js → plex.js → player.js → app.js`. Each folder has a README describing its files.

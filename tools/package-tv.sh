@@ -7,7 +7,8 @@
 #     tools/package-tv.sh [output-dir]
 #
 # Needs the Tizen Studio CLI (TIZEN_HOME, default ~/tizen-studio). Samsung certificates only install on the TVs
-# listed (by DUID) in the distributor certificate.
+# listed (by DUID) in the distributor certificate. Optional: APP_DIR packages an already-staged copy of the app
+# (build-tv.sh uses it to include your .env), JAVA names a JDK 11+ java to use.
 set -euo pipefail
 
 : "${AUTHOR_P12:?path to the author certificate (.p12)}"
@@ -34,8 +35,9 @@ fi
 # Only the app files, as build-tv.ps1 stages them
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-cp -r "$root/config.xml" "$root/index.html" "$root/icon.png" "$root/css" "$root/js" "$stage/"
-if [ -d "$root/img" ]; then cp -r "$root/img" "$stage/"; fi
+src="${APP_DIR:-$root}"
+cp -r "$src/config.xml" "$src/index.html" "$src/icon.png" "$src/css" "$src/js" "$stage/"
+if [ -d "$src/img" ]; then cp -r "$src/img" "$stage/"; fi
 
 # The signing profile. The Tizen CLI reads each password in it through CipherUtil, its own fixed-key cipher
 # (`tizen security-profiles add` hands them to the desktop keyring instead, which a CI runner doesn't have). A
@@ -47,7 +49,7 @@ data="$(sed -n 's/^TIZEN_SDK_DATA_PATH=//p' "$TIZEN_HOME/sdk.info" 2>/dev/null |
 data="${data:-$HOME/tizen-studio-data}"
 mkdir -p "$data/profile"
 encrypted() {
-    java -Dlog4j2.statusLoggerLevel=OFF --add-exports java.xml/com.sun.org.apache.xerces.internal.impl.dv.util=ALL-UNNAMED \
+    "${JAVA:-java}" -Dlog4j2.statusLoggerLevel=OFF --add-exports java.xml/com.sun.org.apache.xerces.internal.impl.dv.util=ALL-UNNAMED \
         -cp "$TIZEN_HOME/tools/ide/lib-ncli/*" "$root/tools/TizenPassword.java" "$1" 2>/dev/null | sed -n 's/^TIZENPW://p'
 }
 author_pw="$(encrypted AUTHOR_PASSWORD)"
@@ -82,7 +84,11 @@ wgt="$(ls "$stage"/*.wgt)"
 fingerprint() { openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2; }
 want="$({ openssl pkcs12 -in "$AUTHOR_P12" -passin env:AUTHOR_PASSWORD -nokeys -clcerts -legacy 2>/dev/null \
     || openssl pkcs12 -in "$AUTHOR_P12" -passin env:AUTHOR_PASSWORD -nokeys -clcerts 2>/dev/null; } | fingerprint)"
-got="$(unzip -p "$wgt" author-signature.xml | tr -d '\r\n' | grep -o '<X509Certificate>[^<]*' | head -1 \
+signature() {      # author-signature.xml from the package (unzip, else Python)
+    if command -v unzip >/dev/null; then unzip -p "$1" author-signature.xml
+    else python3 -c 'import sys, zipfile; sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("author-signature.xml").decode())' "$1"; fi
+}
+got="$(signature "$wgt" | tr -d '\r\n' | grep -o '<X509Certificate>[^<]*' | head -1 \
     | sed 's/<X509Certificate>//' | base64 -d 2>/dev/null | openssl x509 -inform DER -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
 if [ -z "$want" ] || [ "$want" != "$got" ]; then
     echo "error: the package isn't signed with the given author certificate" >&2
