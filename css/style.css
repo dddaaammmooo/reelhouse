@@ -543,11 +543,18 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round
     background: linear-gradient(90deg, var(--bg) 0%, rgba(10,10,13,.6) 25%, rgba(10,10,13,0) 50%, rgba(10,10,13,0) 82%, var(--bg) 100%);
 }
 
-/* A person's photos as a slow filmstrip (personStrip in app.js): drawn once into a canvas that's moved with a
-   transform. Same box as a banner background; the scrim above fades its left edge into the page. */
-.hero-strip { position: absolute; top: 0; right: 0; width: 1340px; height: 100%; overflow: hidden; opacity: 0; transition: opacity 1.2s ease; }
+/* A person's photos as a slow filmstrip across the whole banner (personStrip in app.js): drawn once into a canvas
+   that's moved with a transform. It sits above the banner's scrim and brings its own lighter one, so the photos
+   show right across while the name and biography stay readable. */
+.hero-strip { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; opacity: 0; transition: opacity 1s ease; }
 .hero-strip.show { opacity: 1; }
 .hero-strip canvas { position: absolute; top: 0; left: 0; }
+.hero-strip::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background:
+        linear-gradient(90deg, rgba(10,10,13,.88) 0%, rgba(10,10,13,.72) 35%, rgba(10,10,13,.25) 62%, rgba(10,10,13,.05) 100%),
+        linear-gradient(0deg, var(--bg) 0%, rgba(10,10,13,0) 35%);
+}
 
 /* Remote sounds on/off switch (Settings) */
 .select.toggle .switch { position: relative; width: 64px; height: 36px; border-radius: 18px; background: var(--line); flex-shrink: 0; transition: background .2s; }

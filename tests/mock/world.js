@@ -457,6 +457,11 @@ function route(method, url, body) {
             }
             return json({ results: { bindings: [] } });
         }
+        if (path === '/w/api.php' && query.list === 'search') {
+            const m = /haswbstatement:P4985=(\d+)/.exec(String(query.srsearch || ''));
+            const p = m && PEOPLE.filter(x => x.tmdb === +m[1] && x.qid)[0];
+            return json({ query: { search: p ? [{ title: p.qid }] : [] } });
+        }
         if (path === '/w/api.php' && query.action === 'wbsearchentities') {
             const q = String(query.search || '').toLowerCase();
             return json({ search: PEOPLE.filter(p => p.qid && p.name.toLowerCase().indexOf(q) !== -1).map(p => ({ id: p.qid })) });

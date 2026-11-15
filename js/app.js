@@ -926,9 +926,10 @@
        where the single portrait sits, holds for a moment, and comes round again after the others. ---- */
     const STRIP = {
         tile: 480, blend: 160, height: 600,     // each photo 480x600; neighbours overlap by 160px and cross-fade
-        view: 1340, mainX: 980,                 // the strip's box (as .hero-strip) and the portrait's centre in it
+        view: 1920, mainX: 1560,                // the strip fills the banner; the portrait's centre (right: 160px, 400 wide)
         speed: 22,                              // px per second
-        hold: 2500                              // the main photo alone first, then the strip fades in
+        hold: 1200,                             // the main photo alone first, then the strip fades in
+        rest: 350                               // how long to rest on a person before fetching their photos
     };
     let stripItem = null, stripGen = 0;
     function personStrip(h) {
@@ -937,18 +938,32 @@
         stripItem = item;
         const gen = ++stripGen, shownAt = Date.now();
         hideStrip();
+        People.focus(item && item._person.name);       // their lookups jump the Wikimedia queue
         if (!item) { return; }
         // Only once you've rested on the person (holding an arrow doesn't fetch everyone's photos).
         setTimeout(() => {
             if (gen !== stripGen) { return; }
-            People.gallery(item).then(urls => (gen === stripGen && urls.length > 1 ? loadPhotos(urls) : [])).then(imgs => {
+            People.gallery(item).then(urls => {
+                prefetchNeighbours(h.card);
+                return gen === stripGen && urls.length > 1 ? loadPhotos(urls) : [];
+            }).then(imgs => {
                 if (gen !== stripGen || imgs.length < 2) { return; }
                 whenIdle(() => {
                     if (gen !== stripGen) { return; }
                     setTimeout(() => { if (gen === stripGen) { showStrip(imgs); } }, Math.max(0, STRIP.hold - (Date.now() - shownAt)));
                 });
             }).catch(() => {});
-        }, 700);
+        }, STRIP.rest);
+    }
+    // Flicking along a cast list: the people either side are looked up (and their photos fetched) in the
+    // background, so their strips are ready when you get there.
+    function prefetchNeighbours(card) {
+        [card.previousElementSibling, card.nextElementSibling, card.nextElementSibling && card.nextElementSibling.nextElementSibling].forEach(c => {
+            const it = c && c.classList.contains('card') ? itemOf(c) : null;
+            if (!it || !it._person || it._galleryWarm) { return; }
+            it._galleryWarm = true;
+            whenIdle(() => People.gallery(it).then(urls => urls.slice(1).forEach(u => { new Image().src = u; })).catch(() => {}));
+        });
     }
     // Loaded images in order; none at all if the main photo fails (the strip must start on it).
     function loadPhotos(urls) {
@@ -1000,7 +1015,7 @@
         box.classList.add('show');
         if (cv.animate) {
             cv._anim = cv.animate([{ transform: 'translate3d(' + start + 'px,0,0)' }, { transform: 'translate3d(' + (start - loop) + 'px,0,0)' }],
-                { duration: loop / STRIP.speed * 1000, delay: 1200, iterations: Infinity, easing: 'linear' });
+                { duration: loop / STRIP.speed * 1000, delay: 1000, iterations: Infinity, easing: 'linear' });
         }
     }
     function dropStrip(box) {

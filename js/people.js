@@ -59,15 +59,27 @@ var People = (function () {
         throw err;
     });
     // Wikidata / Wikipedia: one request at a time (bursts get HTTP 429), retrying 429s after the wait they ask for.
-    let wikiChain = Promise.resolve();
-    function wiki(url, timeout) {
-        const attempt = tries => get(url, timeout).catch(err => {
+    /* One request at a time (bursts get HTTP 429), plus a second lane just for the person you're looking at
+       (`focus`, by name): on a Cast page the other cast members' photo and biography lookups used to hold up the
+       highlighted one by ~10 s. */
+    const wikiQueue = [];
+    const lanes = { all: false, focus: false };
+    let focusName = '';
+    function wiki(url, timeout, who) {
+        return new Promise((resolve, reject) => { wikiQueue.push({ url, timeout, who, resolve, reject }); pumpWiki(); });
+    }
+    function runWiki(lane, job) {
+        const attempt = tries => get(job.url, job.timeout).catch(err => {
             if (err.status !== 429 || tries >= 3) { throw err; }
             return sleep(Math.min(8, err.retryAfter || 2 * (tries + 1)) * 1000).then(() => attempt(tries + 1));
         });
-        const run = wikiChain.then(() => attempt(0));
-        wikiChain = run.catch(() => null);
-        return run;
+        lanes[lane] = true;
+        attempt(0).then(job.resolve, job.reject).then(() => { lanes[lane] = false; pumpWiki(); });
+    }
+    function pumpWiki() {
+        const mine = focusName ? wikiQueue.findIndex(j => j.who === focusName) : -1;
+        if (mine >= 0 && !lanes.focus) { runWiki('focus', wikiQueue.splice(mine, 1)[0]); }
+        if (wikiQueue.length && !lanes.all) { runWiki('all', wikiQueue.shift()); }
     }
     /* Saved answers (localStorage), so the same searches, biographies, filmographies and cast lists
        don't hit Wikidata / TVmaze again: fewer HTTP 429s and instant repeat visits. */
@@ -103,7 +115,7 @@ var People = (function () {
         return pending[key];
     }
 
-    const sparql = q => wiki(SPARQL + '?format=json&query=' + encodeURIComponent(q), 30000).then(d => (d && d.results && d.results.bindings) || []);
+    const sparql = (q, who) => wiki(SPARQL + '?format=json&query=' + encodeURIComponent(q), 30000, who).then(d => (d && d.results && d.results.bindings) || []);
 
     /* ---------------- people as cards ---------------- */
 
@@ -140,9 +152,9 @@ var People = (function () {
         };
     }
 
-    function entities(ids) {
+    function entities(ids, who) {
         if (!ids.length) { return Promise.resolve([]); }
-        return wiki(WIKIDATA + '?action=wbgetentities&format=json&origin=*&props=labels|descriptions|claims|sitelinks&languages=en|mul&sitefilter=enwiki&ids=' + ids.join('|'))
+        return wiki(WIKIDATA + '?action=wbgetentities&format=json&origin=*&props=labels|descriptions|claims|sitelinks&languages=en|mul&sitefilter=enwiki&ids=' + ids.join('|'), 0, who)
             .then(d => ids.map(id => d.entities && d.entities[id]).filter(Boolean).map(fromEntity));
     }
 
@@ -150,22 +162,28 @@ var People = (function () {
     function search(name) {
         const term = name.trim().toLowerCase();
         return remember('s:' + term, 7 * DAY, () =>
-            wiki(WIKIDATA + '?action=wbsearchentities&format=json&origin=*&language=en&type=item&limit=20&search=' + encodeURIComponent(term))
-                .then(d => entities(((d && d.search) || []).map(s => s.id)))
+            wiki(WIKIDATA + '?action=wbsearchentities&format=json&origin=*&language=en&type=item&limit=20&search=' + encodeURIComponent(term), 0, name)
+                .then(d => entities(((d && d.search) || []).map(s => s.id), name))
                 .then(list => list.filter(p => p.tmdb || p.acting)))
             .then(list => list.map(p => Object.assign({}, p)));     // callers add to these; keep the saved copy clean
     }
 
-    function byTmdb(tmdbId) {
-        return remember('t:' + tmdbId, 30 * DAY, () => sparql('SELECT ?p WHERE { ?p wdt:P4985 "' + String(tmdbId).replace(/\D/g, '') + '". } LIMIT 1')
-            .then(b => (b[0] ? entities([b[0].p.value.split('/').pop()]) : []))
+    /* Wikidata's search index answers "who has this TMDb person id" in well under a second; the SPARQL service
+       took several, which held up every biography and photo strip on a Cast page. SPARQL is the fallback. */
+    function byTmdb(tmdbId, who) {
+        const id = String(tmdbId).replace(/\D/g, '');
+        const viaSearch = () => wiki(WIKIDATA + '?action=query&list=search&format=json&origin=*&srlimit=1&srprop=&srsearch=' + encodeURIComponent('haswbstatement:P4985=' + id), 15000, who)
+            .then(d => { const hit = d && d.query && d.query.search && d.query.search[0]; return hit && /^Q\d+$/.test(hit.title) ? hit.title : null; });
+        const viaSparql = () => sparql('SELECT ?p WHERE { ?p wdt:P4985 "' + id + '". } LIMIT 1', who).then(b => (b[0] ? b[0].p.value.split('/').pop() : null));
+        return remember('t:' + tmdbId, 30 * DAY, () => viaSearch().catch(() => null).then(q => q || viaSparql())
+            .then(q => (q ? entities([q], who) : []))
             .then(l => l[0] || null)).then(e => (e ? Object.assign({}, e) : null));
     }
 
     /* Fill in a cast member's Wikidata entry (needed for their filmography). */
     function resolve(p) {
         if (p.qid) { return Promise.resolve(p); }
-        const found = p.tmdb ? byTmdb(p.tmdb) : Promise.resolve(null);
+        const found = p.tmdb ? byTmdb(p.tmdb, p.name) : Promise.resolve(null);
         return found.then(e => e || search(p.name).then(l => l[0] || null)).then(e => {
             if (!e) { return p; }
             return Object.assign({}, e, { character: p.character, photo: p.photo || e.photo, photoFull: p.photoFull || e.photoFull });
@@ -195,12 +213,12 @@ var People = (function () {
         }
         return prev[y.length] <= 2;
     }
-    function wikiSummary(title) {
-        return wiki(WIKIPEDIA + encodeURIComponent(String(title).replace(/ /g, '_')), 15000).then(s => (!s || s.type === 'disambiguation' ? null : s));
+    function wikiSummary(title, who) {
+        return wiki(WIKIPEDIA + encodeURIComponent(String(title).replace(/ /g, '_')), 15000, who).then(s => (!s || s.type === 'disambiguation' ? null : s));
     }
     // The best Wikipedia article for a performer by name ("Jason Watkins (actor)" over the footballer).
-    function wikiFind(name, retried) {
-        return wiki(WIKI_API + '?action=query&list=search&format=json&origin=*&srlimit=5&srsearch=' + encodeURIComponent(name + ' actor')).then(d => {
+    function wikiFind(name, retried, who) {
+        return wiki(WIKI_API + '?action=query&list=search&format=json&origin=*&srlimit=5&srsearch=' + encodeURIComponent(name + ' actor'), 0, who || name).then(d => {
             const list = (d && d.query && d.query.search) || [];
             const bare = h => h.title.replace(/\s*\(.*\)$/, '');
             const exact = list.filter(h => sameName(bare(h), name))[0];
@@ -210,13 +228,13 @@ var People = (function () {
             // Misspelt in the cast list? Try Wikipedia's own spelling suggestion once ("philip madoc actor").
             const sug = d && d.query && d.query.searchinfo && d.query.searchinfo.suggestion;
             const fixed = sug ? sug.replace(/\s+actor$/i, '') : '';
-            return !retried && fixed && closeName(fixed, name) && !sameName(fixed, name) ? wikiFind(fixed, true) : null;
+            return !retried && fixed && closeName(fixed, name) && !sameName(fixed, name) ? wikiFind(fixed, true, who || name) : null;
         });
     }
     function biography(p) {
         const title = p.wiki || p.name;
         // A linked article is trusted; a page found by name must look like it's about a performer.
-        const fromTitle = (t, trusted) => wikiSummary(t).then(s => (s && s.extract && (trusted || ACTING_WORDS.test(s.description || '') || ACTING_WORDS.test(s.extract.slice(0, 200)))
+        const fromTitle = (t, trusted) => wikiSummary(t, p.name).then(s => (s && s.extract && (trusted || ACTING_WORDS.test(s.description || '') || ACTING_WORDS.test(s.extract.slice(0, 200)))
             ? { bio: s.extract, image: (s.originalimage && s.originalimage.source) || (s.thumbnail && s.thumbnail.source) || '' } : null));
         return remember('b4:' + title, 30 * DAY, () => fromTitle(title, !!p.wiki).catch(() => null)
             // An exactly matching article is trusted; a near-miss spelling must be about a performer.
@@ -439,11 +457,11 @@ var People = (function () {
     // The same picture from different hosts or sizes: compare file names ("500px-Ada_Quinn.jpg" = "Ada Quinn.jpg").
     const fileKey = url => folded(decodeURIComponent(String(url).split('?')[0].split('/').pop())).replace(/^\d+px-/, '').replace(/ /g, '_');
     function galleryOf(p) {
-        const ent = p.qid && !p.images ? entities([p.qid]).then(l => l[0] || p, () => p) : Promise.resolve(p);
+        const ent = p.qid && !p.images ? entities([p.qid], p.name).then(l => l[0] || p, () => p) : Promise.resolve(p);
         return ent.then(e => {
             const surname = folded(String(p.name).split(/\s+/).pop());
             const category = e.category ? wiki(COMMONS_API + '?action=query&format=json&origin=*&generator=categorymembers&gcmtype=file&gcmlimit=40' +
-                '&prop=imageinfo&iiprop=size|mime&gcmtitle=' + encodeURIComponent('Category:' + e.category)).then(d => {
+                        '&prop=imageinfo&iiprop=size|mime&gcmtitle=' + encodeURIComponent('Category:' + e.category), 0, p.name).then(d => {
                 const pages = (d && d.query && d.query.pages) || {};
                 return Object.keys(pages).map(k => pages[k]).filter(pg => {
                     const ii = pg.imageinfo && pg.imageinfo[0], name = String(pg.title).replace(/^File:/, '');
@@ -459,7 +477,7 @@ var People = (function () {
     }
     function gallery(item) {
         if (!item._gallery) {
-            item._gallery = details(item).then(p => remember('g1:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
+            item._gallery = resolve(item._person).then(p => remember('g1:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
                 const seen = {}, out = [];
                 [item.view.backdrop || p.photoFull || p.photo].concat(list).forEach(u => {
                     if (u && !seen[fileKey(u)]) { seen[fileKey(u)] = true; out.push(u); }
@@ -491,6 +509,7 @@ var People = (function () {
         details,
         photo,
         gallery,
+        focus: name => { focusName = name || ''; },
         works,
         recent
     };
