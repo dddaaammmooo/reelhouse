@@ -37,26 +37,57 @@ trap 'rm -rf "$stage"' EXIT
 cp -r "$root/config.xml" "$root/index.html" "$root/icon.png" "$root/css" "$root/js" "$stage/"
 if [ -d "$root/img" ]; then cp -r "$root/img" "$stage/"; fi
 
-# The signing profile. `tizen security-profiles add` saves the passwords encrypted through the desktop keyring,
-# which a headless runner doesn't have (packaging then fails with "Invaild password"), so the profile is written
-# directly, with the passwords in it. It only exists on the (throwaway) build machine.
+# The signing profile. The Tizen CLI reads each password in it through CipherUtil, its own fixed-key cipher
+# (`tizen security-profiles add` hands them to the desktop keyring instead, which a CI runner doesn't have). A
+# plain password only works by luck: one that happens to look like base64 fails to decrypt and the CLI stops to
+# ask for it, which can't work without a terminal. So each one is encrypted with the CLI's own CipherUtil
+# (tools/TizenPassword.java, run by a JDK 11+: the CLI's bundled Java 8 can't run a .java file). The profile only
+# exists on the build machine.
 data="$(sed -n 's/^TIZEN_SDK_DATA_PATH=//p' "$TIZEN_HOME/sdk.info" 2>/dev/null || true)"
 data="${data:-$HOME/tizen-studio-data}"
 mkdir -p "$data/profile"
+encrypted() {
+    java -Dlog4j2.statusLoggerLevel=OFF --add-exports java.xml/com.sun.org.apache.xerces.internal.impl.dv.util=ALL-UNNAMED \
+        -cp "$TIZEN_HOME/tools/ide/lib-ncli/*" "$root/tools/TizenPassword.java" "$1" 2>/dev/null | sed -n 's/^TIZENPW://p'
+}
+author_pw="$(encrypted AUTHOR_PASSWORD)"
+distributor_pw="$(encrypted DISTRIBUTOR_PASSWORD)"
+if [ -z "$author_pw" ] || [ -z "$distributor_pw" ]; then
+    echo "error: couldn't encrypt the passwords for the signing profile (needs a JDK 11+ as 'java')" >&2
+    exit 1
+fi
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
 cat > "$data/profile/profiles.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <profiles active="Reelhouse" version="3.1">
 <profile name="Reelhouse">
-<profileitem ca="" distributor="0" key="$(xml "$(realpath "$AUTHOR_P12")")" password="$(xml "$AUTHOR_PASSWORD")" rootca=""/>
-<profileitem ca="" distributor="1" key="$(xml "$(realpath "$DISTRIBUTOR_P12")")" password="$(xml "$DISTRIBUTOR_PASSWORD")" rootca=""/>
+<profileitem ca="" distributor="0" key="$(xml "$(realpath "$AUTHOR_P12")")" password="$(xml "$author_pw")" rootca=""/>
+<profileitem ca="" distributor="1" key="$(xml "$(realpath "$DISTRIBUTOR_P12")")" password="$(xml "$distributor_pw")" rootca=""/>
 <profileitem ca="" distributor="2" key="" password="" rootca=""/>
 </profile>
 </profiles>
 EOF
 chmod 600 "$data/profile/profiles.xml"
-"$tizen" package -t wgt -s Reelhouse -- "$stage" < /dev/null      # never wait for a password prompt
+"$tizen" package -t wgt -s Reelhouse -- "$stage" < /dev/null || true
 
+# The CLI can report an error and still exit 0, so check for the package itself.
+if ! ls "$stage"/*.wgt > /dev/null 2>&1; then
+    echo "error: packaging failed; see $data/cli/logs/cli.log" >&2
+    exit 1
+fi
 wgt="$(ls "$stage"/*.wgt)"
+
+# Make sure it's signed with this author certificate: when the CLI can't use a profile it can quietly sign with
+# another one. Only a match / no match is printed (certificates can carry the owner's name).
+fingerprint() { openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2; }
+want="$({ openssl pkcs12 -in "$AUTHOR_P12" -passin env:AUTHOR_PASSWORD -nokeys -clcerts -legacy 2>/dev/null \
+    || openssl pkcs12 -in "$AUTHOR_P12" -passin env:AUTHOR_PASSWORD -nokeys -clcerts 2>/dev/null; } | fingerprint)"
+got="$(unzip -p "$wgt" author-signature.xml | tr -d '\r\n' | grep -o '<X509Certificate>[^<]*' | head -1 \
+    | sed 's/<X509Certificate>//' | base64 -d 2>/dev/null | openssl x509 -inform DER -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    echo "error: the package isn't signed with the given author certificate" >&2
+    exit 1
+fi
+echo "Signed with the given author certificate."
 mv "$wgt" "$out/"
 echo "Built $out/$(basename "$wgt")"

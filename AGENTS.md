@@ -685,7 +685,16 @@ Workflows in `.github/workflows/` (repo `dddaaammmooo/reelhouse`):
 - **Commit messages must be conventional** (`feat:`, `fix:`, `feat!:` …) or release-please ignores them. The first public commit is tagged `v1.1.0` to match `.release-please-manifest.json`.
 - **Signed releases:** secrets `TIZEN_AUTHOR_P12` / `TIZEN_DISTRIBUTOR_P12` (base64 of the files in `%USERPROFILE%\SamsungCertificate\MediaLoader\`) and `TIZEN_AUTHOR_PASSWORD` / `TIZEN_DISTRIBUTOR_PASSWORD`.
   - The passwords must be entered by the owner: Tizen Studio keeps them encrypted in `.pwd` files that can't be read back.
-  - `tizen security-profiles add` can't save passwords on a headless runner (no keyring; packaging then fails with "Invaild password"), so `package-tv.sh` writes `profiles.xml` itself.
+  - **How the CLI reads profile passwords** (found by disassembling the CLI's own `lib-ncli` jars):
+    - an attribute ending in `.pwd` is looked up in the desktop keyring (`LinuxCrypt`, through the bundled `secret-tool`), which a runner doesn't have;
+    - anything else is decrypted with `CipherUtil`, a fixed-key DES over base64. A plain password only works by luck: `citestpass` "decrypted" to itself, while an 8-character letters-and-digits one throws `IllegalBlockSizeException`, so the CLI stops to ask, and that crashes with no terminal (`ConsolePrompter` NPE).
+  - So `package-tv.sh` writes `profiles.xml` with each password encrypted by the CLI's own `CipherUtil` (`tools/TizenPassword.java`, run with a JDK 17 from `setup-java`; the CLI bundles Java 8). Tizen's log4j prints to stdout, so the value comes on a `TIZENPW:` line.
+  - Further checks:
+    - each password must open its `.p12` (openssl) first;
+    - a trailing line ending from pasting is dropped;
+    - the `.wgt` must exist, because the CLI can fail and still exit 0;
+    - its `author-signature.xml` certificate must match the author `.p12` (SHA-256 fingerprint; only match/no-match is printed). Without a usable profile the CLI quietly signs with something else.
+  - Tested in Ubuntu 24.04 with throwaway certificates: 8 alphanumeric characters, 10 letters, symbols (`&<"\`), and a wrong password.
   - The package only installs on the DUIDs in the distributor certificate and carries no API keys (release files are public); `build-tv.ps1` is still the way to install with `.env` baked in.
   - Verified in an Ubuntu 24.04 container with a throwaway certificate.
 - Local check before pushing: `docker run --rm -v "<repo>:/repo" zricethezav/gitleaks:latest dir /repo` (with `MSYS_NO_PATHCONV=1` in Git Bash). Only `.env` and `.buildResult/` should be flagged, and both are git-ignored. Delete any report file afterwards, because it contains the secrets.
