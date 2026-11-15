@@ -1,0 +1,10 @@
+.env
+.env.example
+*.wgt
+README.md
+docker-compose.yml
+Dockerfile
+.git
+.buildResult
+build-tv.ps1
+AGENTS.md

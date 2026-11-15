@@ -1,0 +1,16 @@
+services:
+  medialoader:
+    build: .
+    container_name: medialoader
+    ports:
+      - "8080:80"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Live-edit: changes to the app show up on browser refresh, no rebuild needed.
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./icon.png:/usr/share/nginx/html/icon.png:ro
+      - ./css:/usr/share/nginx/html/css:ro
+      - ./js:/usr/share/nginx/html/js:ro
+    restart: unless-stopped

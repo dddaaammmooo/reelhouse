@@ -1,0 +1,10 @@
+# Secrets and personal values (never commit)
+.env
+LOCAL.md
+
+# Build output and tooling
+.buildResult/
+.metadata/
+*.wgt
+node_modules/
+coverage/

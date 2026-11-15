@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>Reelhouse</title>
+    <link rel="icon" href="icon.png">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+    <!-- Left navigation rail: collapsed to icons, expands when focused -->
+    <nav id="rail">
+        <div class="rail-logo">Reel<b>house</b></div>
+        <div class="rail-items v-list">
+            <button class="rail-item focusable" data-nav="search" data-kind="tv">
+                <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 3l4 4 4-4"/></svg>
+                <span class="rail-label">TV Shows</span>
+            </button>
+            <button class="rail-item focusable" data-nav="search" data-kind="movie">
+                <svg viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M3 9l1.5-5 16.5 3-1 2"/><path d="M8.5 4.8l1.5 4M14 5.8l1.5 3.2"/></svg>
+                <span class="rail-label">Movies</span>
+            </button>
+            <button class="rail-item focusable" data-nav="search" data-kind="music">
+                <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                <span class="rail-label">Music</span>
+            </button>
+            <button class="rail-item focusable" data-nav="search" data-kind="people">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+                <span class="rail-label">Actors</span>
+            </button>
+            <button class="rail-item focusable" data-nav="downloads">
+                <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+                <span class="rail-label">Downloads</span>
+                <span id="rail-badge" class="rail-badge hidden">0</span>
+            </button>
+            <button class="rail-item focusable" data-nav="settings">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+                <span class="rail-label">Settings</span>
+            </button>
+        </div>
+    </nav>
+
+    <main id="stage">
+
+        <!-- SEARCH (one screen, reused for TV / Movies / Music) -->
+        <section id="screen-search" class="screen">
+            <div class="hero">
+                <div class="hero-bg" id="hero-bg-a"></div>
+                <div class="hero-bg" id="hero-bg-b"></div>
+                <div class="hero-scrim"></div>
+                <div class="hero-content">
+                    <div class="page-title" id="page-title">
+                        <h2 id="page-title-text"></h2>
+                        <p id="page-title-sub"></p>
+                    </div>
+                    <div class="search-line">
+                        <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                        <input id="search-input" class="focusable" data-nav-down="#hero-more" type="text" autocomplete="off" spellcheck="false" readonly>
+                        <span id="search-spinner" class="mini-spinner hidden"></span>
+                    </div>
+                    <!-- Search keyboard (letter grid), shown instead of the TV's own keyboard -->
+                    <div id="kb" class="kb"></div>
+                    <div id="hero-info" class="hero-info">
+                        <p class="eyebrow" id="hero-eyebrow"></p>
+                        <h1 id="hero-title"></h1>
+                        <p class="hero-meta" id="hero-meta"></p>
+                        <p class="hero-overview" id="hero-overview"></p>
+                        <div class="hero-actions">
+                            <button id="hero-more" class="btn more focusable hidden" data-nav-up="#search-input">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5v.5"/></svg>
+                                More info
+                            </button>
+                            <button id="hero-genre" class="btn more focusable hidden" data-nav-up="#search-input">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                                Genre
+                            </button>
+                            <button id="hero-pub" class="btn more focusable hidden" data-nav-up="#search-input">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                                Publisher
+                            </button>
+                            <button id="hero-browse" class="btn more focusable hidden">
+                                <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 3l4 4 4-4"/></svg>
+                                Browse TV Shows
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Category rows (or search results). The focused row snaps to the top of this area. -->
+            <div class="results-area v-scroll snap" id="results-area">
+                <div class="v-inner" id="results-rows"></div>
+            </div>
+            <p class="results-empty hidden" id="results-empty"></p>
+
+            <!-- Details for one download: centred modal, poster full-height on the left, text on the right -->
+            <div id="dl-scrim" class="sheet-scrim"></div>
+            <aside id="dl-sheet" class="sheet" aria-hidden="true">
+                <div class="sheet-poster" id="ds-thumb"></div>
+                <div class="sheet-main">
+                <div class="sheet-head">
+                    <div class="sheet-titles">
+                        <p class="eyebrow" id="ds-app"></p>
+                        <h2 id="ds-title"></h2>
+                        <p class="sheet-sub" id="ds-sub"></p>
+                    </div>
+                </div>
+                <div class="sheet-body">
+                    <p class="sheet-desc" id="ds-desc"></p>
+                    <div class="sheet-progress">
+                        <div class="sheet-progress-top"><b id="ds-state"></b><span id="ds-pct"></span></div>
+                        <div class="dl-bar big"><i id="ds-bar"></i></div>
+                        <p class="sheet-eta" id="ds-eta"></p>
+                    </div>
+                    <p class="sheet-msg hidden" id="ds-msg"></p>
+                    <dl class="facts" id="ds-facts"></dl>
+                </div>
+                <div class="sheet-actions">
+                    <button class="btn danger focusable" id="ds-cancel">Cancel download</button>
+                    <button class="btn focusable" id="ds-blocklist">Find another release</button>
+                    <button class="btn focusable" id="ds-close">Close</button>
+                </div>
+                </div>
+            </aside>
+
+            <!-- A season of a TV show (Plex-style): art and actions on the left, episodes on the right -->
+            <div id="ss-sheet" class="sheet season" aria-hidden="true">
+                <div class="ss-bg" id="ss-bg"></div>
+                <div class="ss-left">
+                    <div class="ss-poster" id="ss-poster"></div>
+                    <div class="ss-buttons v-list">
+                        <button class="btn primary focusable hidden" id="ss-play">&#9654; Play</button>
+                        <button class="btn focusable" id="ss-download">Download season</button>
+                    </div>
+                </div>
+                <div class="ss-main">
+                    <p class="eyebrow" id="ss-show"></p>
+                    <h2 id="ss-title"></h2>
+                    <p class="ss-meta" id="ss-meta"></p>
+                    <p class="ss-summary" id="ss-summary"></p>
+                    <div class="ss-list-view"><div class="ss-list v-list" id="ss-list"></div></div>
+                </div>
+            </div>
+
+            <!-- Genres / publishers of the titles on this screen (opened from the banner); OK shows only that one's titles -->
+            <aside id="gp-sheet" class="sheet browse" aria-hidden="true">
+                <div class="art-head"><p class="eyebrow" id="gp-eyebrow"></p><h2 id="gp-title"></h2></div>
+                <div class="gp-viewport"><div class="gp-grid" id="gp-grid"></div></div>
+            </aside>
+
+            <!-- Choose a show's picture (when TVmaze has more than one poster) -->
+            <aside id="art-sheet" class="sheet art" aria-hidden="true">
+                <div class="art-head"><p class="eyebrow">Choose picture</p><h2 id="art-title"></h2></div>
+                <div class="art-viewport"><div class="art-track" id="art-track"></div></div>
+            </aside>
+
+            <!-- Full description / biography (opened from the shortened text in a pop-up); Up/Down scroll it -->
+            <div id="tx-sheet" class="sheet info text" aria-hidden="true">
+                <div class="sheet-main">
+                    <div class="sheet-head"><div class="sheet-titles"><p class="eyebrow" id="tx-eyebrow"></p><h2 id="tx-title"></h2></div></div>
+                    <div class="sheet-body" id="tx-body"></div>
+                    <div class="sheet-actions"><button class="btn focusable" id="tx-close">Close</button></div>
+                </div>
+            </div>
+
+            <!-- A person: full-size photo on the left, biography and their movies / shows on the right -->
+            <div id="ps-scrim" class="sheet-scrim"></div>
+            <aside id="ps-sheet" class="sheet info person" aria-hidden="true">
+                <div class="sheet-poster" id="ps-photo"></div>
+                <div class="sheet-main">
+                    <div class="sheet-head">
+                        <div class="sheet-titles">
+                            <p class="eyebrow">Actor</p>
+                            <h2 id="ps-name"></h2>
+                            <p class="sheet-sub" id="ps-sub"></p>
+                        </div>
+                    </div>
+                    <div class="sheet-body" id="ps-body">
+                        <p class="info-overview" id="ps-bio" data-nav-left="#ps-bio" data-nav-right="#ps-bio"></p>
+                        <dl class="facts" id="ps-facts"></dl>
+                    </div>
+                    <div class="sheet-actions">
+                        <button class="btn primary focusable" id="ps-works">Movies &amp; TV shows</button>
+                        <button class="btn focusable" id="ps-close">Close</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Full details for a title: same centred modal as downloads, with Download as the action -->
+            <div id="info-scrim" class="sheet-scrim"></div>
+            <aside id="info-sheet" class="sheet info" aria-hidden="true">
+                <div class="sheet-poster" id="in-poster"></div>
+                <div class="sheet-main">
+                    <div class="sheet-head">
+                        <div class="sheet-titles">
+                            <p class="eyebrow" id="in-eyebrow"></p>
+                            <h2 id="in-title"></h2>
+                            <p class="sheet-sub" id="in-meta"></p>
+                        </div>
+                    </div>
+                    <div class="sheet-body" id="in-body">
+                        <div class="ratings" id="in-ratings"></div>
+                        <p class="info-overview" id="in-overview"></p>
+                        <dl class="facts" id="in-facts"></dl>
+                    </div>
+                    <div class="in-seasons hidden" id="in-seasons">
+                        <h4 class="in-seasons-title" id="in-seasons-title">Seasons</h4>
+                        <div class="in-season-viewport"><div class="in-season-track" id="in-season-track"></div></div>
+                    </div>
+                    <div class="sheet-actions">
+                        <button class="btn primary focusable" id="in-download">Download</button>
+                        <button class="btn focusable hidden" id="in-trailer">▶ Trailer</button>
+                        <button class="btn focusable hidden" id="in-plexapp">Plex app</button>
+                        <button class="btn focusable icon-btn hidden" id="in-art" aria-label="Choose picture"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg></button>
+                        <button class="btn focusable" id="in-cast">Cast</button>
+                        <button class="btn focusable" id="in-similar">Similar</button>
+                        <button class="btn focusable" id="in-close">Close</button>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="screen-settings" class="screen">
+            <header class="page-head">
+                <h1>Settings</h1>
+                <p class="page-sub">Your preferences, then each app's server address and API key (in the app: Settings › General › API Key).</p>
+            </header>
+            <div class="v-scroll"><div class="v-inner">
+                <div id="settings-form" class="settings"></div>
+                <div class="settings-actions">
+                    <button id="settings-reset" class="btn focusable">Reset to defaults</button>
+                    <button id="settings-save" class="btn primary focusable">Save &amp; test</button>
+                </div>
+            </div></div>
+        
+            <!-- Download quality picker (opened from a Settings card) -->
+            <div id="qp-scrim" class="sheet-scrim"></div>
+            <aside id="qp-sheet" class="sheet picker" aria-hidden="true">
+                <h2 id="qp-title">Download quality</h2>
+                <p class="picker-sub" id="qp-sub"></p>
+                <div class="picker-list sheet-body v-list" id="qp-list"></div>
+            </aside>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- Loading screen: shown at start-up until the first screen's posters have loaded -->
+    <div id="splash" class="splash" aria-live="polite">
+        <h1 class="splash-name">Reel<b>house</b></h1>
+        <div class="splash-bar"><i id="splash-bar"></i></div>
+        <p class="splash-text hidden" id="splash-text"></p>
+    </div>
+</div>
+
+<!-- Video player (js/player.js). On the TV, AVPlay draws the video on a plane under the page, so this layer is transparent there. -->
+<div id="pl" class="pl">
+    <object id="av-player" type="application/avplayer"></object>
+    <video id="pl-video" class="hidden" preload="auto"></video>
+    <div class="pl-subs normal" id="pl-subs"></div>
+    <div class="pl-spinner hidden" id="pl-spinner"></div>
+    <div class="pl-top">
+        <div class="pl-titles"><h2 id="pl-title"></h2><p id="pl-sub"></p></div>
+        <div class="pl-clock"><b id="pl-clock"></b><span id="pl-ends"></span></div>
+    </div>
+    <button class="pl-skip pl-f" id="pl-btn-skip">Skip Intro</button>
+    <div class="pl-bottom">
+        <div class="pl-thumb" id="pl-thumb"><div class="pl-thumb-img" id="pl-thumb-img"></div><span id="pl-thumb-time"></span></div>
+        <div class="pl-bar pl-f" id="pl-bar"><div class="pl-fill" id="pl-fill"></div></div>
+        <div class="pl-times"><span id="pl-time">0:00</span><span id="pl-left"></span></div>
+        <div class="pl-buttons">
+            <button class="pl-btn pl-f" id="pl-btn-back10">&#8634; 10</button>
+            <button class="pl-btn pl-f round" id="pl-btn-play"><span id="pl-play">&#10074;&#10074;</span></button>
+            <button class="pl-btn pl-f" id="pl-btn-fwd30">30 &#8635;</button>
+            <button class="pl-btn pl-f hidden" id="pl-btn-next">Next episode</button>
+            <button class="pl-btn pl-f" id="pl-btn-menu">Audio &amp; subtitles</button>
+        </div>
+    </div>
+    <div class="pl-next" id="pl-next">
+        <div class="pl-next-thumb" id="pl-next-thumb"></div>
+        <div class="pl-next-text"><p class="eyebrow">Up next</p><h3 id="pl-next-title"></h3><p id="pl-next-count"></p><span class="pl-next-btn">&#9654; Play now</span></div>
+    </div>
+    <div class="pl-resume" id="pl-resume">
+        <h2 id="pl-resume-title"></h2>
+        <button class="pl-btn pl-f" id="pl-resume-yes"><span id="pl-resume-at"></span></button>
+        <button class="pl-btn pl-f" id="pl-resume-no">Play from the beginning</button>
+    </div>
+    <aside class="pl-menu" id="pl-menu"><h3>Audio, subtitles &amp; quality</h3><div class="pl-menu-list" id="pl-menu-list"></div></aside>
+</div>
+
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+<script src="js/config.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/api.js"></script>
+<script src="js/feeds.js"></script>
+<script src="js/people.js"></script>
+<script src="js/seasons.js"></script>
+<script src="js/plex.js"></script>
+<script src="js/player.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
