@@ -66,7 +66,8 @@ test('gallery: main photo first, then Wikidata, TVmaze and Commons portraits, no
     card.view.poster = card.view.backdrop = 'https://image.tmdb.org/t/p/h632/ada-main.jpg';
     const urls = plain(await ctx.People.gallery(card));
     assert.equal(urls[0], 'https://image.tmdb.org/t/p/h632/ada-main.jpg');
-    const names = urls.slice(1).map(u => decodeURIComponent(u).replace(/^.*\//, '').replace(/\?.*$/, ''));
+    const names = urls.slice(1).map(u => decodeURIComponent(u).replace(/^.*\//, '').replace(/\?.*$/, ''))
+        .filter(n => !/^ada-gallery/.test(n));      // TMDb's gallery: checked in its own test
     // Wikidata portraits, then TVmaze roles, the Wikipedia article, the Commons category, TVmaze's own photo
     // Commons pictures by their direct (CORS-enabled) thumbnail address, not the Special:FilePath redirect
     assert.deepEqual(names.slice(0, 2), ['500px-ada-quinn.jpg', '500px-Ada_Quinn_2019.jpg']);
@@ -74,10 +75,28 @@ test('gallery: main photo first, then Wikidata, TVmaze and Commons portraits, no
     assert.match(names[2], /^character-ada-quinn-as-/, 'TVmaze role photo');
     assert.ok(names.indexOf('640px-Ada_Quinn_as_Mara.jpg') !== -1, 'Wikipedia article picture');
     assert.ok(names.every(n => !/logo|signature|Bruno|panorama|crowd/i.test(n)), 'non-portraits skipped');
-    assert.ok(urls.length <= 8);
+    assert.ok(urls.length <= 10);
     // Nobody has nothing extra
     const none = plain(await ctx.People.gallery(personCard('Hal Nobody')));
     assert.ok(none.length <= 1);
+});
+
+test('gallery: TMDb photos first (best rated, big enough) when a TMDb token is set, sent as a bearer token', async () => {
+    const { ctx, requests } = make();
+    const card = personCard('Ada Quinn');
+    card._person.tmdb = 9001;
+    card.view.poster = card.view.backdrop = 'https://image.tmdb.org/t/p/h632/ada-main.jpg';
+    const urls = plain(await ctx.People.gallery(card));
+    assert.deepEqual(urls.slice(1, 3), ['https://image.tmdb.org/t/p/h632/ada-gallery-a.jpg', 'https://image.tmdb.org/t/p/h632/ada-gallery-b.jpg']);
+    assert.ok(urls.every(u => !/ada-tiny/.test(u)), 'too small to fill a tile');
+    assert.equal(requests.filter(r => /api\.themoviedb\.org/.test(r.url))[0].headers.Authorization, 'Bearer test-tmdb-token');
+    // Without a token, TMDb isn't asked
+    const bare = make({ globals: Object.assign(plain(require('./sandbox').CONFIG), { MEDIALOADER_TMDB: { token: '' } }) });
+    const c2 = personCard('Ada Quinn');
+    c2.view.poster = c2.view.backdrop = 'https://image.tmdb.org/t/p/h632/ada-main.jpg';
+    const plainUrls = plain(await bare.ctx.People.gallery(c2));
+    assert.ok(plainUrls.every(u => !/ada-gallery/.test(u)));
+    assert.ok(!bare.requests.some(r => /themoviedb/.test(r.url)), 'TMDb not asked without a token');
 });
 
 test('works: an actor\'s movies (newest first) and TV shows as rows', async () => {

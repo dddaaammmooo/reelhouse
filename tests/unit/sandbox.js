@@ -89,7 +89,8 @@ const CONFIG = {
         movie: { url: 'http://media-server:7878', apiKey: 'test-radarr-key', qualityProfile: 'Low Quality 1080' },
         music: { url: 'http://media-server:8686', apiKey: 'test-lidarr-key', qualityProfile: '' }
     },
-    MEDIALOADER_PLEX: { url: 'http://plex-server:32400', token: 'test-plex-token' }
+    MEDIALOADER_PLEX: { url: 'http://plex-server:32400', token: 'test-plex-token' },
+    MEDIALOADER_TMDB: { token: 'test-tmdb-token' }
 };
 
 const tick = ms => new Promise(r => setTimeout(r, ms || 0));

@@ -13,6 +13,7 @@ var MEDIALOADER_DEFAULTS = {
     music: { url: '$(esc "${LIDARR_URL:-http://media-server:8686}")', apiKey: '$(esc "${LIDARR_API_KEY}")', qualityProfile: '$(esc "${LIDARR_QUALITY_PROFILE}")' }
 };
 var MEDIALOADER_PLEX = { url: '$(esc "${PLEX_URL:-http://<plex-server-ip>:32400}")', token: '$(esc "${PLEX_TOKEN}")' };
+var MEDIALOADER_TMDB = { token: '$(esc "${TMDB_TOKEN}")' };
 EOF
 
 echo "MediaLoader config written (Sonarr key: ${SONARR_API_KEY:+set}${SONARR_API_KEY:-MISSING}, Radarr key: ${RADARR_API_KEY:+set}${RADARR_API_KEY:-MISSING}, Lidarr key: ${LIDARR_API_KEY:+set}${LIDARR_API_KEY:-MISSING})"

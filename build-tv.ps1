@@ -59,6 +59,7 @@ var MEDIALOADER_DEFAULTS = {
     music: { url: '$(Esc $mu.url)', apiKey: '$(Esc $mu.key)', qualityProfile: '$(Esc $mu.qp)' }
 };
 var MEDIALOADER_PLEX = { url: '$(Esc (Get-Val 'PLEX_URL' 'http://<plex-server-ip>:32400'))', token: '$(Esc (Get-Val 'PLEX_TOKEN' ''))' };
+var MEDIALOADER_TMDB = { token: '$(Esc (Get-Val 'TMDB_TOKEN' ''))' };
 "@
     Set-Content -Path (Join-Path $stage 'js\config.js') -Value $config -Encoding UTF8
     $missing = @('SONARR_API_KEY', 'RADARR_API_KEY', 'LIDARR_API_KEY') | Where-Object { -not $vals[$_] }

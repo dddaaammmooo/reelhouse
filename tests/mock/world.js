@@ -360,6 +360,18 @@ function route(method, url, body) {
     if (isImage(url)) { return text(svgImage(url), 'image/svg+xml'); }
     const { host, path, query } = parse(url);
 
+    // TMDb person photos (optional TMDB_TOKEN): Ada Quinn has a small gallery, everyone else none
+    if (/api\.themoviedb\.org$/.test(host)) {
+        const m = /^\/3\/person\/(\d+)\/images$/.exec(path);
+        if (m) {
+            const p = PEOPLE.filter(x => x.tmdb === +m[1])[0];
+            return json({ id: +m[1], profiles: p && p.name === 'Ada Quinn' ? [
+                { file_path: '/ada-gallery-b.jpg', width: 800, height: 1200, vote_average: 5.1, vote_count: 2 },
+                { file_path: '/ada-gallery-a.jpg', width: 800, height: 1200, vote_average: 5.6, vote_count: 4 },
+                { file_path: '/ada-tiny.jpg', width: 150, height: 225, vote_average: 9, vote_count: 9 }
+            ] : [] });
+        }
+    }
     // Radarr's public metadata service (directly, or through the Docker proxy at /feeds/radarr)
     const radarrMeta = /api\.radarr\.video$/.test(host) ? path : (path.indexOf('/feeds/radarr') === 0 ? path.slice('/feeds/radarr'.length) : null);
     if (radarrMeta !== null) {

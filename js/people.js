@@ -26,12 +26,13 @@ var People = (function () {
     const ACTING = ['Q33999', 'Q10800557', 'Q10798782', 'Q2405480', 'Q2259451', 'Q245068'];   // actor, film/TV/voice/stage actor, comedian
     const MAX_FILMS = 60;
 
-    function request(method, url, body, timeout) {
+    function request(method, url, body, timeout, headers) {
         return new Promise((resolve, reject) => {
             const x = new XMLHttpRequest();
             x.open(method, url, true);
             x.timeout = timeout || 30000;
             x.setRequestHeader('Accept', 'application/json');
+            Object.keys(headers || {}).forEach(k => x.setRequestHeader(k, headers[k]));
             if (body) { x.setRequestHeader('Content-Type', 'application/json'); }
             // Wikimedia rate-limits anonymous clients harder; it asks browser apps to name themselves this way.
             if (/wiki(data|pedia|media)\.org/.test(url)) { x.setRequestHeader('Api-User-Agent', 'Reelhouse/1.0 (Tizen TV media browser)'); }
@@ -451,7 +452,9 @@ var People = (function () {
        Wikimedia Commons category that look like a portrait of them alone (JPEG, not landscape, their surname in
        the file name, no signatures, posters or group shots). The main photo comes first; at most 6. Saved 30 days. */
     const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
-    const GALLERY_MAX = 8;          // the strip keeps at most 6 once copies of the same picture are dropped
+    const TMDB_API = 'https://api.themoviedb.org/3';
+    const tmdbToken = () => (typeof MEDIALOADER_TMDB !== 'undefined' && MEDIALOADER_TMDB && MEDIALOADER_TMDB.token) || '';
+    const GALLERY_MAX = 10;          // the strip keeps at most 6 once copies of the same picture are dropped
     const NOT_PORTRAIT = /signature|autograph|logo|poster|grave|tomb|plaque|walk of fame|\bstar\b|\bwith\b|\band\b|&/i;
     const folded = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     // The same picture from different hosts or sizes: compare file names ("500px-Ada_Quinn.jpg" = "Ada Quinn.jpg").
@@ -501,13 +504,22 @@ var People = (function () {
                     const best = i.srcset.slice().sort((a, b) => (parseFloat(b.scale) || 1) - (parseFloat(a.scale) || 1))[0].src;   // the largest
                     return (/^\/\//.test(best) ? 'https:' : '') + best;
                 })).catch(() => []) : Promise.resolve([]);
+            // TMDb's photo gallery (needs the optional TMDB_TOKEN): curated portraits, best rated first. Rich for
+            // well-known actors; often just the main photo for others.
+            const tmdbId = e.tmdb || p.tmdb;
+            const tmdbPhotos = tmdbToken() && tmdbId ? request('GET', TMDB_API + '/person/' + encodeURIComponent(tmdbId) + '/images', null, 15000,
+                { Authorization: 'Bearer ' + tmdbToken() }).then(d => ((d && d.profiles) || [])
+                .filter(i => i.file_path && i.width >= 300)
+                .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0) || (b.vote_count || 0) - (a.vote_count || 0))
+                .map(i => 'https://image.tmdb.org/t/p/h632' + i.file_path)).catch(() => []) : Promise.resolve([]);
             // Most varied first; TVmaze's own photo last, as it's often the same picture as the main (TMDb) one.
-            return Promise.all([portraits, maze, article, category]).then(r => r[0].concat(r[1].roles, r[2], r[3], r[1].own));
+            return Promise.all([portraits, maze, article, category, tmdbPhotos]).then(r =>
+                r[4].slice(0, 5).concat(r[0], r[1].roles, r[2], r[3], r[4].slice(5), r[1].own));
         });
     }
     function gallery(item) {
         if (!item._gallery) {
-            item._gallery = resolve(item._person).then(p => remember('g3:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
+            item._gallery = resolve(item._person).then(p => remember('g4:' + (tmdbToken() ? 't' : '') + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
                 const seen = {}, out = [];
                 let main = item.view.backdrop || p.photoFull || p.photo;
                 // A Commons main photo (Special:FilePath) is swapped for its direct address, so it can be compared too.

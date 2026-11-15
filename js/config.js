@@ -18,3 +18,6 @@ var MEDIALOADER_DEFAULTS = {
 // Plex server for "Play In Plex". token = the Plex Home admin / server owner's token; leave empty and
 // Play In Plex just opens the Plex app.
 var MEDIALOADER_PLEX = { url: 'http://<plex-server-ip>:32400', token: '' };
+
+// Optional TMDb "API read access token" (themoviedb.org › Settings › API): more photos of actors in the banner.
+var MEDIALOADER_TMDB = { token: '' };

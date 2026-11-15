@@ -184,7 +184,12 @@ Reelhouse then appears at the end of the TV's **Apps** list. Run the same comman
 
 If PowerShell refuses to run the script, allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-**From a GitHub release:** each release has a zip of the app files. Unzip it over a copy of this repository (or anywhere with `build-tv.ps1` and your `.env` next to it) and run the script as above. Release builds aren't signed, because signing needs your own certificate.
+**From a GitHub release:** each release has two downloads.
+
+- `reelhouse-vX.Y.Z.wgt` is signed with the repository owner's Samsung certificate, so it only installs on the TVs listed in that certificate. Install it with `tizen.bat install -n reelhouse-vX.Y.Z.wgt -s <tv-ip>:26101 -- <folder>`. It contains no server addresses or keys, so enter them on the TV in **Settings**.
+- The zip holds the app files. For your own TV, unzip it over a copy of this repository (or anywhere with `build-tv.ps1` and your `.env` next to it) and run the script as above, which signs with your certificate.
+
+To sign releases of your own fork, add four repository secrets (Settings › Secrets and variables › Actions): `TIZEN_AUTHOR_P12` and `TIZEN_DISTRIBUTOR_P12` (your `author.p12` / `distributor.p12`, base64-encoded) and `TIZEN_AUTHOR_PASSWORD` / `TIZEN_DISTRIBUTOR_PASSWORD`. The **TV package** workflow can also be run by hand from the Actions tab; the `.wgt` is then kept as a build artifact for 14 days.
 
 ### Doing it by hand
 
