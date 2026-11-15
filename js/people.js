@@ -34,7 +34,7 @@ var People = (function () {
             x.setRequestHeader('Accept', 'application/json');
             if (body) { x.setRequestHeader('Content-Type', 'application/json'); }
             // Wikimedia rate-limits anonymous clients harder; it asks browser apps to name themselves this way.
-            if (/wiki(data|pedia)\.org/.test(url)) { x.setRequestHeader('Api-User-Agent', 'Reelhouse/1.0 (Tizen TV media browser)'); }
+            if (/wiki(data|pedia|media)\.org/.test(url)) { x.setRequestHeader('Api-User-Agent', 'Reelhouse/1.0 (Tizen TV media browser)'); }
             x.onload = () => {
                 if (x.status >= 200 && x.status < 300) {
                     try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(new Error('Bad data')); }
@@ -125,12 +125,15 @@ var People = (function () {
         const claims = ent.claims || {};
         const val = prop => { const c = claims[prop] && claims[prop][0]; return c && c.mainsnak && c.mainsnak.datavalue ? c.mainsnak.datavalue.value : null; };
         const img = val('P18');
+        const files = (claims.P18 || []).map(c => c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value).filter(Boolean);
         return {
             qid: ent.id,
             name: ent.labels && (ent.labels.en || ent.labels.mul) ? (ent.labels.en || ent.labels.mul).value : ent.id,
             description: ent.descriptions && ent.descriptions.en ? ent.descriptions.en.value : '',
             photo: img ? commons(img, 400) : '',
             photoFull: img ? commons(img, 1400) : '',
+            images: files,                  // every portrait on Wikidata (the banner's filmstrip)
+            category: val('P373') || '',    // their Wikimedia Commons category
             tmdb: val('P4985'),
             wiki: ent.sitelinks && ent.sitelinks.enwiki ? ent.sitelinks.enwiki.title : '',
             acting: (claims.P106 || []).some(c => c.mainsnak && c.mainsnak.datavalue && ACTING.indexOf(c.mainsnak.datavalue.value.id) !== -1)
@@ -426,6 +429,48 @@ var People = (function () {
         return item._details;
     }
 
+    /* More photos for the banner's filmstrip: every Wikidata portrait, TVmaze's photo, and files in their
+       Wikimedia Commons category that look like a portrait of them alone (JPEG, not landscape, their surname in
+       the file name, no signatures, posters or group shots). The main photo comes first; at most 6. Saved 30 days. */
+    const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
+    const GALLERY_MAX = 6;
+    const NOT_PORTRAIT = /signature|autograph|logo|poster|grave|tomb|plaque|walk of fame|\bstar\b|\bwith\b|\band\b|&/i;
+    const folded = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // The same picture from different hosts or sizes: compare file names ("500px-Ada_Quinn.jpg" = "Ada Quinn.jpg").
+    const fileKey = url => folded(decodeURIComponent(String(url).split('?')[0].split('/').pop())).replace(/^\d+px-/, '').replace(/ /g, '_');
+    function galleryOf(p) {
+        const ent = p.qid && !p.images ? entities([p.qid]).then(l => l[0] || p, () => p) : Promise.resolve(p);
+        return ent.then(e => {
+            const surname = folded(String(p.name).split(/\s+/).pop());
+            const category = e.category ? wiki(COMMONS_API + '?action=query&format=json&origin=*&generator=categorymembers&gcmtype=file&gcmlimit=40' +
+                '&prop=imageinfo&iiprop=size|mime&gcmtitle=' + encodeURIComponent('Category:' + e.category)).then(d => {
+                const pages = (d && d.query && d.query.pages) || {};
+                return Object.keys(pages).map(k => pages[k]).filter(pg => {
+                    const ii = pg.imageinfo && pg.imageinfo[0], name = String(pg.title).replace(/^File:/, '');
+                    return ii && ii.mime === 'image/jpeg' && ii.width >= 300 && ii.width <= ii.height * 1.1 &&
+                        folded(name).indexOf(surname) !== -1 && !NOT_PORTRAIT.test(name);
+                }).map(pg => commons(String(pg.title).replace(/^File:/, ''), 500));
+            }).catch(() => []) : Promise.resolve([]);
+            const maze = tvmaze('/search/people?q=' + encodeURIComponent(p.name))
+                .then(list => (list || []).map(r => r.person).filter(x => x.image && sameName(x.name, p.name)).map(x => x.image.original || x.image.medium))
+                .catch(() => []);
+            return Promise.all([maze, category]).then(r => (e.images || []).map(f => commons(f, 500)).concat(r[0], r[1]));
+        });
+    }
+    function gallery(item) {
+        if (!item._gallery) {
+            item._gallery = details(item).then(p => remember('g1:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
+                const seen = {}, out = [];
+                [item.view.backdrop || p.photoFull || p.photo].concat(list).forEach(u => {
+                    if (u && !seen[fileKey(u)]) { seen[fileKey(u)] = true; out.push(u); }
+                });
+                return out.slice(0, GALLERY_MAX);
+            }));
+            item._gallery.catch(() => { item._gallery = null; });
+        }
+        return item._gallery;
+    }
+
     /* Their movies and TV shows as browse rows (newest first). Cached on the card. */
     function works(item) {
         if (!item._works) {
@@ -445,6 +490,7 @@ var People = (function () {
         cast: (kind, real, item) => cast(kind, real, item).then(list => list.map(card)),
         details,
         photo,
+        gallery,
         works,
         recent
     };

@@ -641,6 +641,21 @@ The player menu has a **Subtitle timing** section while subtitles are on. It's a
   - With automatic skipping off, it's the old "Skip Intro" / "Skip Credits".
   - The button sits bottom right (80 px in), lifted above the controls while they show.
 
+## Actor banner: photo filmstrip (15 Nov 2026)
+
+When a person is in the banner, their main photo shows first, as before. If more photos are found, a slow filmstrip of them fades in after about 2.5 s and drifts right to left (`personStrip` / `showStrip` in app.js, `#hero-strip`).
+
+- **Photos** (`People.gallery(item)`, saved 30 days as `g1:<qid>`, at most 6, the main photo first):
+  - every Wikidata portrait (P18; `fromEntity` now keeps them all as `images`, plus the Commons category P373 as `category`);
+  - TVmaze's photo for the same name;
+  - files in the person's Wikimedia Commons category that look like a portrait of them alone: JPEG, not landscape, their surname in the file name, and none of "signature", "poster", "with", "and"...
+
+  Duplicates across hosts and sizes are matched by file name (`fileKey`).
+- **Drawing:** each photo is cropped to a 480×600 tile (top-aligned), with its left 160 px fading in over the previous one (`destination-in` gradient). The tiles are drawn once into one canvas, repeated so the strip loops seamlessly every `n × 320` px.
+- **Animation:** the canvas is moved with a WAAPI `translate3d` animation at 22 px/s, transform only and no masks (masked animating layers flicker on the TV). The scrim above fades its left edge into the page. It starts with a later copy of the main photo centred where the portrait sits, so the change is seamless.
+- **Lifecycle:** nothing is fetched until you've rested on a person for 0.7 s, and the strip is drawn only while the remote is quiet (`whenIdle`). Moving away fades it out and frees the canvas (`width = 0`), which matters on the TV's limited memory: about 3000–5000 × 600 px.
+- `People` requests to commons.wikimedia.org send `Api-User-Agent` too (allowed by CORS, verified live).
+
 ## GitHub: CI, security scanning, releases (15 Nov 2026)
 
 Workflows in `.github/workflows/` (repo `dddaaammmooo/reelhouse`):

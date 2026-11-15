@@ -543,6 +543,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round
     background: linear-gradient(90deg, var(--bg) 0%, rgba(10,10,13,.6) 25%, rgba(10,10,13,0) 50%, rgba(10,10,13,0) 82%, var(--bg) 100%);
 }
 
+/* A person's photos as a slow filmstrip (personStrip in app.js): drawn once into a canvas that's moved with a
+   transform. Same box as a banner background; the scrim above fades its left edge into the page. */
+.hero-strip { position: absolute; top: 0; right: 0; width: 1340px; height: 100%; overflow: hidden; opacity: 0; transition: opacity 1.2s ease; }
+.hero-strip.show { opacity: 1; }
+.hero-strip canvas { position: absolute; top: 0; left: 0; }
+
 /* Remote sounds on/off switch (Settings) */
 .select.toggle .switch { position: relative; width: 64px; height: 36px; border-radius: 18px; background: var(--line); flex-shrink: 0; transition: background .2s; }
 .select.toggle .switch::after {

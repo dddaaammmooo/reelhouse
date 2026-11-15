@@ -308,6 +308,11 @@ function entity(p) {
         P18: p.name === 'Hal Nobody' ? undefined : [{ mainsnak: { datavalue: { value: slug(p.name) + '.jpg' } } }],
         P4985: [{ mainsnak: { datavalue: { value: String(p.tmdb) } } }]
     };
+    // Ada Quinn has a second portrait and a Commons category (the banner's filmstrip)
+    if (p.name === 'Ada Quinn') {
+        claims.P18.push({ mainsnak: { datavalue: { value: 'Ada Quinn 2019.jpg' } } });
+        claims.P373 = [{ mainsnak: { datavalue: { value: 'Ada Quinn' } } }];
+    }
     if (!claims.P18) { delete claims.P18; }
     return { id: p.qid, labels: { en: { value: p.name } }, descriptions: { en: { value: p.desc } }, claims, sitelinks: { enwiki: { title: p.name } } };
 }
@@ -332,7 +337,7 @@ function svgImage(url) {
         '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c1 + '"/><stop offset="1" stop-color="' + c2 + '"/></linearGradient></defs>' +
         '<rect width="100%" height="100%" fill="url(#g)"/>' + body + '</svg>';
 }
-const isImage = url => /image\.tmdb\.org|static\.tvmaze\.com|mzstatic\.com|dzcdn\.net|commons\.wikimedia\.org|upload\.wikimedia\.org|thetvdb\.com\/banners|\/photo\/:\/transcode|\/thumb$|\/art$|MediaCover/.test(url);
+const isImage = url => /image\.tmdb\.org|static\.tvmaze\.com|mzstatic\.com|dzcdn\.net|commons\.wikimedia\.org\/wiki\/|upload\.wikimedia\.org|thetvdb\.com\/banners|\/photo\/:\/transcode|\/thumb$|\/art$|MediaCover/.test(url);
 
 /* ---------------- the router ---------------- */
 
@@ -461,6 +466,21 @@ function route(method, url, body) {
             String(query.ids || '').split('|').forEach(id => { const p = PEOPLE.filter(x => x.qid === id)[0]; if (p) { ents[id] = entity(p); } });
             return json({ entities: ents });
         }
+    }
+    // Wikimedia Commons: a person's category (portraits, plus files the filmstrip must skip)
+    if (/commons\.wikimedia\.org$/.test(host) && path === '/w/api.php' && query.generator === 'categorymembers') {
+        const file = (title, width, height, mime) => ({ title: 'File:' + title, imageinfo: [{ width, height, mime: mime || 'image/jpeg' }] });
+        const files = query.gcmtitle === 'Category:Ada Quinn' ? [
+            file('Ada Quinn at the Harbour Lights premiere.jpg', 800, 1200),
+            file('Ada Quinn 2019.jpg', 900, 1200),                                   // already on Wikidata
+            file('Ada Quinn signature.svg', 400, 200, 'image/svg+xml'),
+            file('Ada Quinn and Bruno Calder.jpg', 800, 1100),                       // a group shot
+            file('Glass Harbour cast panorama Quinn.jpg', 3000, 900),                // landscape
+            file('Festival crowd.jpg', 800, 1200)                                    // not her
+        ] : [];
+        const pages = {};
+        files.forEach((f, i) => { pages[-(i + 1)] = f; });
+        return json({ query: { pages } });
     }
     // Wikipedia
     if (/en\.wikipedia\.org$/.test(host)) {

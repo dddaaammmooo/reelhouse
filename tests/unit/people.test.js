@@ -60,6 +60,20 @@ test('photo fallbacks: the cast photo, TVmaze people search, Wikipedia, none', a
     assert.equal((await ctx.People.photo({ name: 'Hal Nobody' })).photo, '');
 });
 
+test('gallery: main photo first, then Wikidata, TVmaze and Commons portraits, no repeats or non-portraits', async () => {
+    const { ctx } = make();
+    const card = personCard('Ada Quinn');
+    card.view.poster = card.view.backdrop = 'https://image.tmdb.org/t/p/h632/ada-main.jpg';
+    const urls = plain(await ctx.People.gallery(card));
+    assert.equal(urls[0], 'https://image.tmdb.org/t/p/h632/ada-main.jpg');
+    assert.deepEqual(urls.slice(1).map(u => decodeURIComponent(u).replace(/^.*\//, '').replace(/\?.*$/, '')),
+        ['ada-quinn.jpg', 'Ada Quinn 2019.jpg', 'person-ada-quinn.jpg', 'Ada Quinn at the Harbour Lights premiere.jpg']);
+    assert.ok(urls.length <= 6);
+    // Nobody has nothing extra
+    const none = plain(await ctx.People.gallery(personCard('Hal Nobody')));
+    assert.ok(none.length <= 1);
+});
+
 test('works: an actor\'s movies (newest first) and TV shows as rows', async () => {
     const { ctx } = make();
     const rows = await ctx.People.works(personCard('Ada Quinn'));

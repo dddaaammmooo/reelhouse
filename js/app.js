@@ -885,6 +885,7 @@
         // Crossfade the backdrop, debounced so holding an arrow doesn't load every image.
         clearTimeout(bgTimer);
         bgTimer = setTimeout(() => setBackdrop(h.backdrop || null, !!h.portrait), 220);
+        personStrip(h);
     }
 
     /* Banner backgrounds at most 1280px wide. The sources' originals are often 4K, and decoding one froze
@@ -917,6 +918,104 @@
             bgFront = backId;
         };
         img.src = url;
+    }
+
+    /* ---- A person in the banner: their main photo first, then a slow filmstrip of their other photos, each
+       blended into the next, drifting right to left (People.gallery). The strip is drawn once into a canvas and
+       moved with a transform only (a masked, animating layer flickers on the TV). The main photo starts exactly
+       where the single portrait sits, holds for a moment, and comes round again after the others. ---- */
+    const STRIP = {
+        tile: 480, blend: 160, height: 600,     // each photo 480x600; neighbours overlap by 160px and cross-fade
+        view: 1340, mainX: 980,                 // the strip's box (as .hero-strip) and the portrait's centre in it
+        speed: 22,                              // px per second
+        hold: 2500                              // the main photo alone first, then the strip fades in
+    };
+    let stripItem = null, stripGen = 0;
+    function personStrip(h) {
+        const item = h.portrait && h.card ? itemOf(h.card) : null;
+        if (item === stripItem) { return; }
+        stripItem = item;
+        const gen = ++stripGen, shownAt = Date.now();
+        hideStrip();
+        if (!item) { return; }
+        // Only once you've rested on the person (holding an arrow doesn't fetch everyone's photos).
+        setTimeout(() => {
+            if (gen !== stripGen) { return; }
+            People.gallery(item).then(urls => (gen === stripGen && urls.length > 1 ? loadPhotos(urls) : [])).then(imgs => {
+                if (gen !== stripGen || imgs.length < 2) { return; }
+                whenIdle(() => {
+                    if (gen !== stripGen) { return; }
+                    setTimeout(() => { if (gen === stripGen) { showStrip(imgs); } }, Math.max(0, STRIP.hold - (Date.now() - shownAt)));
+                });
+            }).catch(() => {});
+        }, 700);
+    }
+    // Loaded images in order; none at all if the main photo fails (the strip must start on it).
+    function loadPhotos(urls) {
+        return Promise.all(urls.map(u => new Promise(res => {
+            const img = new Image();
+            let done = false;
+            const fin = ok => { if (!done) { done = true; res(ok && img.naturalWidth >= 200 ? img : null); } };
+            img.onload = () => fin(true);
+            img.onerror = () => fin(false);
+            setTimeout(() => fin(false), 10000);
+            img.src = u;
+        }))).then(list => (list[0] ? list.filter(Boolean) : []));
+    }
+    // One photo cropped to the tile (top-aligned: faces are near the top), its left edge fading in over the last.
+    function stripTile(img) {
+        const c = document.createElement('canvas');
+        c.width = STRIP.tile; c.height = STRIP.height;
+        const x = c.getContext('2d');
+        const k = Math.max(STRIP.tile / img.naturalWidth, STRIP.height / img.naturalHeight);
+        const w = img.naturalWidth * k;
+        x.drawImage(img, (STRIP.tile - w) / 2, 0, w, img.naturalHeight * k);
+        x.globalCompositeOperation = 'destination-in';
+        const g = x.createLinearGradient(0, 0, STRIP.tile, 0);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(STRIP.blend / STRIP.tile, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,1)');
+        x.fillStyle = g;
+        x.fillRect(0, 0, STRIP.tile, STRIP.height);
+        return c;
+    }
+    /* Tiles repeat (photo j % n at j * step), so the strip loops seamlessly every n * step pixels. It starts with a
+       later copy of the main photo centred on the portrait, far enough in that the very first tile (with nothing
+       to blend into) never shows, and is long enough to fill the box for a whole loop. */
+    function showStrip(imgs) {
+        const T = STRIP.tile, step = STRIP.tile - STRIP.blend, n = imgs.length, loop = n * step;
+        let r = 1;
+        while (r * loop + T / 2 - STRIP.mainX < STRIP.blend) { r++; }
+        const start = STRIP.mainX - T / 2 - r * loop;
+        const count = Math.ceil((STRIP.view - start + loop) / step) + 1;
+        const cv = document.createElement('canvas');
+        cv.width = (count - 1) * step + T; cv.height = STRIP.height;
+        const ctx = cv.getContext('2d'), tiles = imgs.map(stripTile);
+        for (let j = 0; j < count; j++) { ctx.drawImage(tiles[j % n], j * step, 0); }
+        const box = $('hero-strip');
+        dropStrip(box);
+        cv.style.transform = 'translate3d(' + start + 'px,0,0)';
+        box.appendChild(cv);
+        void box.offsetWidth;
+        box.classList.add('show');
+        if (cv.animate) {
+            cv._anim = cv.animate([{ transform: 'translate3d(' + start + 'px,0,0)' }, { transform: 'translate3d(' + (start - loop) + 'px,0,0)' }],
+                { duration: loop / STRIP.speed * 1000, delay: 1200, iterations: Infinity, easing: 'linear' });
+        }
+    }
+    function dropStrip(box) {
+        Array.prototype.slice.call(box.querySelectorAll('canvas')).forEach(c => {
+            if (c._anim) { c._anim.cancel(); }
+            c.width = 0;                                   // frees the bitmap now (the TV is short of memory)
+            box.removeChild(c);
+        });
+    }
+    function hideStrip() {
+        const box = $('hero-strip');
+        if (!box.classList.contains('show')) { dropStrip(box); return; }
+        box.classList.remove('show');
+        const gen = stripGen;
+        setTimeout(() => { if (gen === stripGen && !box.classList.contains('show')) { dropStrip(box); } }, 1300);
     }
 
     /* ---- title details modal: OK on a poster opens it; Download inside it starts the download ---- */
