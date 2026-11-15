@@ -645,12 +645,15 @@ The player menu has a **Subtitle timing** section while subtitles are on. It's a
 
 When a person is in the banner (Actors screen, Cast pages, an actor's page), their main photo shows first, as before. If more photos are found, a slow filmstrip of them fades in across the **whole banner width** and drifts right to left (`personStrip` / `showStrip` in app.js, `#hero-strip`). The strip sits above `.hero-scrim` and has its own lighter scrim (`.hero-strip::after`), so the photos show right across while the text stays readable.
 
-- **Photos** (`People.gallery(item)`, saved 30 days as `g1:<qid>`, at most 6, the main photo first):
-  - every Wikidata portrait (P18; `fromEntity` now keeps them all as `images`, plus the Commons category P373 as `category`);
-  - TVmaze's photo for the same name;
-  - files in the person's Wikimedia Commons category that look like a portrait of them alone: JPEG, not landscape, their surname in the file name, and none of "signature", "poster", "with", "and"...
+- **Photos** (`People.gallery(item)`, saved 30 days as `g3:<qid>`, up to 8 candidates, the main photo first), most varied first:
+  1. every Wikidata portrait (P18; `fromEntity` keeps them all as `images`, plus the Commons category P373 as `category`);
+  2. **TVmaze character images**: a photo of them in each role (`/people/{id}/castcredits?embed=character`). This is the best source for TV actors, who often have one photo or none on Wikimedia (Alberta Watson: none on Commons, three roles on TVmaze);
+  3. pictures in their Wikipedia article (`/page/media-list`, including screenshots that aren't on Commons), at the largest size offered;
+  4. files in their Commons category that look like a portrait of them alone: JPEG, not landscape, their surname in the file name, and none of "signature", "poster", "with", "and"...;
+  5. TVmaze's own photo, last, because it's often the TMDb main photo again.
 
-  Duplicates across hosts and sizes are matched by file name (`fileKey`).
+  Commons files are used by their direct `upload.wikimedia.org` thumbnail address (`imageinfo` `thumburl`). The `Special:FilePath` redirect has no CORS header, so pictures loaded through it couldn't be compared. Duplicate URLs are matched by file name (`fileKey`).
+- **Copies of the same picture** (`loadPhotos` in app.js): the same photo often comes from TMDb, TVmaze and Commons under different names (Don Francks's 1966 portrait came three times). Images are loaded with `crossOrigin='anonymous'` (TMDb, TVmaze and Wikimedia all send `Access-Control-Allow-Origin: *`; a host that doesn't gets a plain load and isn't checked). `photoPrint` makes a 64-bit difference hash of the part the tile shows, and pictures within 10 bits of one already kept are dropped. The strip keeps at most 6 and needs 2 different photos.
 - **Drawing:** each photo is cropped to a 480×600 tile (top-aligned), with its left 160 px fading in over the previous one (`destination-in` gradient). The tiles are drawn once into one canvas, repeated so the strip loops seamlessly every `n × 320` px.
 - **Animation:** the canvas is moved with a WAAPI `translate3d` animation at 22 px/s, transform only and no masks (masked animating layers flicker on the TV). The scrim above fades its left edge into the page. It starts with a later copy of the main photo centred where the portrait sits, so the change is seamless.
 - **Speed when flicking through a cast:**

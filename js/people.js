@@ -451,7 +451,7 @@ var People = (function () {
        Wikimedia Commons category that look like a portrait of them alone (JPEG, not landscape, their surname in
        the file name, no signatures, posters or group shots). The main photo comes first; at most 6. Saved 30 days. */
     const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
-    const GALLERY_MAX = 6;
+    const GALLERY_MAX = 8;          // the strip keeps at most 6 once copies of the same picture are dropped
     const NOT_PORTRAIT = /signature|autograph|logo|poster|grave|tomb|plaque|walk of fame|\bstar\b|\bwith\b|\band\b|&/i;
     const folded = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     // The same picture from different hosts or sizes: compare file names ("500px-Ada_Quinn.jpg" = "Ada Quinn.jpg").
@@ -460,26 +460,60 @@ var People = (function () {
         const ent = p.qid && !p.images ? entities([p.qid], p.name).then(l => l[0] || p, () => p) : Promise.resolve(p);
         return ent.then(e => {
             const surname = folded(String(p.name).split(/\s+/).pop());
+            /* Commons files by their direct upload.wikimedia.org thumbnail address (`thumburl`): the
+               Special:FilePath redirect has no CORS header, so the app couldn't compare those pictures for copies. */
+            const direct = pg => { const ii = pg.imageinfo && pg.imageinfo[0]; return ii && (ii.thumburl || ii.url); };
+            const files = e.images || [];
+            const portraits = files.length ? wiki(COMMONS_API + '?action=query&format=json&origin=*&prop=imageinfo&iiprop=url&iiurlwidth=500&titles=' +
+                encodeURIComponent(files.map(f => 'File:' + f).join('|')), 0, p.name).then(d => {
+                const pages = (d && d.query && d.query.pages) || {};
+                const byName = {};
+                Object.keys(pages).forEach(k => { byName[folded(pages[k].title).replace(/_/g, ' ')] = direct(pages[k]); });
+                return files.map(f => byName[folded('File:' + f).replace(/_/g, ' ')] || commons(f, 500));
+            }).catch(() => files.map(f => commons(f, 500))) : Promise.resolve([]);
             const category = e.category ? wiki(COMMONS_API + '?action=query&format=json&origin=*&generator=categorymembers&gcmtype=file&gcmlimit=40' +
-                        '&prop=imageinfo&iiprop=size|mime&gcmtitle=' + encodeURIComponent('Category:' + e.category), 0, p.name).then(d => {
+                        '&prop=imageinfo&iiprop=size|mime|url&iiurlwidth=500&gcmtitle=' + encodeURIComponent('Category:' + e.category), 0, p.name).then(d => {
                 const pages = (d && d.query && d.query.pages) || {};
                 return Object.keys(pages).map(k => pages[k]).filter(pg => {
                     const ii = pg.imageinfo && pg.imageinfo[0], name = String(pg.title).replace(/^File:/, '');
                     return ii && ii.mime === 'image/jpeg' && ii.width >= 300 && ii.width <= ii.height * 1.1 &&
                         folded(name).indexOf(surname) !== -1 && !NOT_PORTRAIT.test(name);
-                }).map(pg => commons(String(pg.title).replace(/^File:/, ''), 500));
+                }).map(pg => direct(pg) || commons(String(pg.title).replace(/^File:/, ''), 500));
             }).catch(() => []) : Promise.resolve([]);
-            const maze = tvmaze('/search/people?q=' + encodeURIComponent(p.name))
-                .then(list => (list || []).map(r => r.person).filter(x => x.image && sameName(x.name, p.name)).map(x => x.image.original || x.image.medium))
-                .catch(() => []);
-            return Promise.all([maze, category]).then(r => (e.images || []).map(f => commons(f, 500)).concat(r[0], r[1]));
+            // TVmaze: their photo, plus a photo of them in each role (character images): the richest source for
+            // TV actors, who often have one photo or none on Wikimedia.
+            const maze = tvmaze('/search/people?q=' + encodeURIComponent(p.name)).then(list => {
+                const hit = (list || []).map(r => r.person).filter(x => sameName(x.name, p.name))[0];
+                if (!hit) { return { own: [], roles: [] }; }
+                const own = hit.image ? [hit.image.original || hit.image.medium] : [];
+                return tvmaze('/people/' + hit.id + '/castcredits?embed=character').then(credits => ({
+                    own,
+                    roles: (credits || []).map(c => c._embedded && c._embedded.character && c._embedded.character.image)
+                        .filter(Boolean).map(img => img.original || img.medium)
+                }), () => ({ own, roles: [] }));
+            }).catch(() => ({ own: [], roles: [] }));
+            // Pictures in their Wikipedia article (including screenshots that aren't on Commons).
+            const article = e.wiki ? wiki(WIKIPEDIA.replace('/summary/', '/media-list/') + encodeURIComponent(String(e.wiki).replace(/ /g, '_')), 15000, p.name).then(d =>
+                ((d && d.items) || []).filter(i => {
+                    const name = String(i.title || '').replace(/^File:/, '');
+                    return i.type === 'image' && /\.jpe?g$/i.test(name) && folded(name).indexOf(surname) !== -1 && !NOT_PORTRAIT.test(name) && i.srcset && i.srcset[0];
+                }).map(i => {
+                    const best = i.srcset.slice().sort((a, b) => (parseFloat(b.scale) || 1) - (parseFloat(a.scale) || 1))[0].src;   // the largest
+                    return (/^\/\//.test(best) ? 'https:' : '') + best;
+                })).catch(() => []) : Promise.resolve([]);
+            // Most varied first; TVmaze's own photo last, as it's often the same picture as the main (TMDb) one.
+            return Promise.all([portraits, maze, article, category]).then(r => r[0].concat(r[1].roles, r[2], r[3], r[1].own));
         });
     }
     function gallery(item) {
         if (!item._gallery) {
-            item._gallery = resolve(item._person).then(p => remember('g1:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
+            item._gallery = resolve(item._person).then(p => remember('g3:' + (p.qid || folded(p.name)), 30 * DAY, () => galleryOf(p)).then(list => {
                 const seen = {}, out = [];
-                [item.view.backdrop || p.photoFull || p.photo].concat(list).forEach(u => {
+                let main = item.view.backdrop || p.photoFull || p.photo;
+                // A Commons main photo (Special:FilePath) is swapped for its direct address, so it can be compared too.
+                const twin = /Special:FilePath/.test(main || '') && list.filter(u => fileKey(u) === fileKey(main))[0];
+                if (twin) { main = twin; }
+                [main].concat(list).forEach(u => {
                     if (u && !seen[fileKey(u)]) { seen[fileKey(u)] = true; out.push(u); }
                 });
                 return out.slice(0, GALLERY_MAX);

@@ -438,7 +438,10 @@ function route(method, url, body) {
         m = /^\/people\/(\d+)\/castcredits$/.exec(path);
         if (m) {
             const p = PEOPLE.filter(x => x.tvmaze === +m[1])[0];
-            return json(SHOWS.filter(s => p && s.cast.some(c => c[0] === p.name)).map(s => ({ _embedded: { show: mazeShow(s) } })));
+            return json(SHOWS.filter(s => p && s.cast.some(c => c[0] === p.name)).map(s => {
+                const role = s.cast.filter(c => c[0] === p.name)[0][1];
+                return { _embedded: { show: mazeShow(s), character: { name: role, image: { medium: mazeImg(p.name + '-as-' + role, 'character'), original: mazeImg(p.name + '-as-' + role, 'character') } } } };
+            }));
         }
     }
     // Wikidata
@@ -473,8 +476,14 @@ function route(method, url, body) {
         }
     }
     // Wikimedia Commons: a person's category (portraits, plus files the filmstrip must skip)
+    const thumb = title => 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/' + title.replace(/ /g, '_') + '/500px-' + title.replace(/ /g, '_');
+    if (/commons\.wikimedia\.org$/.test(host) && path === '/w/api.php' && query.titles) {
+        const pages = {};
+        String(query.titles).split('|').forEach((t, i) => { pages[-(i + 1)] = { title: t, imageinfo: [{ thumburl: thumb(t.replace(/^File:/, '')) }] }; });
+        return json({ query: { pages } });
+    }
     if (/commons\.wikimedia\.org$/.test(host) && path === '/w/api.php' && query.generator === 'categorymembers') {
-        const file = (title, width, height, mime) => ({ title: 'File:' + title, imageinfo: [{ width, height, mime: mime || 'image/jpeg' }] });
+        const file = (title, width, height, mime) => ({ title: 'File:' + title, imageinfo: [{ width, height, mime: mime || 'image/jpeg', thumburl: thumb(title) }] });
         const files = query.gcmtitle === 'Category:Ada Quinn' ? [
             file('Ada Quinn at the Harbour Lights premiere.jpg', 800, 1200),
             file('Ada Quinn 2019.jpg', 900, 1200),                                   // already on Wikidata
@@ -489,6 +498,15 @@ function route(method, url, body) {
     }
     // Wikipedia
     if (/en\.wikipedia\.org$/.test(host)) {
+        const media = /^\/api\/rest_v1\/page\/media-list\/(.+)$/.exec(path);
+        if (media) {
+            const title = decodeURIComponent(media[1]).replace(/_/g, ' ');
+            const items = title === 'Ada Quinn' ? [
+                { type: 'image', title: 'File:Ada Quinn as Mara.jpg', srcset: [{ src: '//upload.wikimedia.org/wikipedia/en/thumb/a/ab/Ada_Quinn_as_Mara.jpg/640px-Ada_Quinn_as_Mara.jpg' }] },
+                { type: 'image', title: 'File:Harbour Lights logo.svg', srcset: [{ src: '//upload.wikimedia.org/wikipedia/en/c/cd/Harbour_Lights_logo.svg' }] }
+            ] : [];
+            return json({ items });
+        }
         let m = /^\/api\/rest_v1\/page\/summary\/(.+)$/.exec(path);
         if (m) {
             const title = decodeURIComponent(m[1]).replace(/_/g, ' ');

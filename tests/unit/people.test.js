@@ -66,9 +66,15 @@ test('gallery: main photo first, then Wikidata, TVmaze and Commons portraits, no
     card.view.poster = card.view.backdrop = 'https://image.tmdb.org/t/p/h632/ada-main.jpg';
     const urls = plain(await ctx.People.gallery(card));
     assert.equal(urls[0], 'https://image.tmdb.org/t/p/h632/ada-main.jpg');
-    assert.deepEqual(urls.slice(1).map(u => decodeURIComponent(u).replace(/^.*\//, '').replace(/\?.*$/, '')),
-        ['ada-quinn.jpg', 'Ada Quinn 2019.jpg', 'person-ada-quinn.jpg', 'Ada Quinn at the Harbour Lights premiere.jpg']);
-    assert.ok(urls.length <= 6);
+    const names = urls.slice(1).map(u => decodeURIComponent(u).replace(/^.*\//, '').replace(/\?.*$/, ''));
+    // Wikidata portraits, then TVmaze roles, the Wikipedia article, the Commons category, TVmaze's own photo
+    // Commons pictures by their direct (CORS-enabled) thumbnail address, not the Special:FilePath redirect
+    assert.deepEqual(names.slice(0, 2), ['500px-ada-quinn.jpg', '500px-Ada_Quinn_2019.jpg']);
+    assert.ok(urls.every(u => !/Special:FilePath/.test(u)), 'no redirects');
+    assert.match(names[2], /^character-ada-quinn-as-/, 'TVmaze role photo');
+    assert.ok(names.indexOf('640px-Ada_Quinn_as_Mara.jpg') !== -1, 'Wikipedia article picture');
+    assert.ok(names.every(n => !/logo|signature|Bruno|panorama|crowd/i.test(n)), 'non-portraits skipped');
+    assert.ok(urls.length <= 8);
     // Nobody has nothing extra
     const none = plain(await ctx.People.gallery(personCard('Hal Nobody')));
     assert.ok(none.length <= 1);

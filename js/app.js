@@ -965,17 +965,54 @@
             whenIdle(() => People.gallery(it).then(urls => urls.slice(1).forEach(u => { new Image().src = u; })).catch(() => {}));
         });
     }
-    // Loaded images in order; none at all if the main photo fails (the strip must start on it).
-    function loadPhotos(urls) {
-        return Promise.all(urls.map(u => new Promise(res => {
+    /* Loaded images in order, without copies of the same picture (TMDb, TVmaze and Wikimedia often have the same
+       photo under different names); none at all if the main photo fails (the strip must start on it). Images are
+       fetched with CORS (all three hosts allow it) so their pixels can be compared; a host that refuses gets a
+       plain load and is kept unchecked. */
+    const STRIP_MAX = 6;
+    function loadPhoto(u, cors) {
+        return new Promise(res => {
             const img = new Image();
             let done = false;
             const fin = ok => { if (!done) { done = true; res(ok && img.naturalWidth >= 200 ? img : null); } };
+            if (cors) { img.crossOrigin = 'anonymous'; }
             img.onload = () => fin(true);
             img.onerror = () => fin(false);
             setTimeout(() => fin(false), 10000);
             img.src = u;
-        }))).then(list => (list[0] ? list.filter(Boolean) : []));
+        }).then(img => (img || !cors ? img : loadPhoto(u, false)));
+    }
+    /* A 64-bit fingerprint of the part of the photo the strip shows (the tile's crop): each cell of a 9x8 greyscale
+       thumbnail compared with its right-hand neighbour. Copies of one picture differ by a few bits at most. */
+    function photoPrint(img) {
+        try {
+            const c = document.createElement('canvas');
+            c.width = 9; c.height = 8;
+            const x = c.getContext('2d');
+            const k = Math.max(STRIP.tile / img.naturalWidth, STRIP.height / img.naturalHeight);
+            const sw = STRIP.tile / k, sh = STRIP.height / k;
+            x.drawImage(img, (img.naturalWidth - sw) / 2, 0, sw, sh, 0, 0, 9, 8);
+            const d = x.getImageData(0, 0, 9, 8).data, bits = [];
+            const lum = i => d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+            for (let y = 0; y < 8; y++) {
+                for (let i = 0; i < 8; i++) { const at = (y * 9 + i) * 4; bits.push(lum(at) > lum(at + 4) ? 1 : 0); }
+            }
+            return bits;
+        } catch (e) { return null; }                       // no CORS: the canvas is tainted
+    }
+    const samePicture = (a, b) => { let diff = 0; for (let i = 0; i < 64; i++) { diff += a[i] !== b[i] ? 1 : 0; } return diff <= 10; };
+    function loadPhotos(urls) {
+        return Promise.all(urls.map(u => loadPhoto(u, true))).then(list => {
+            if (!list[0]) { return []; }
+            const kept = [], prints = [];
+            list.forEach(img => {
+                if (!img || kept.length >= STRIP_MAX) { return; }
+                const print = photoPrint(img);
+                if (print && prints.some(p => p && samePicture(p, print))) { return; }
+                kept.push(img); prints.push(print);
+            });
+            return kept;
+        });
     }
     // One photo cropped to the tile (top-aligned: faces are near the top), its left edge fading in over the last.
     function stripTile(img) {
