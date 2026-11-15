@@ -19,6 +19,18 @@ tizen="$TIZEN_HOME/tools/ide/bin/tizen"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$(mkdir -p "${1:-$root/dist}" && cd "${1:-$root/dist}" && pwd)"
 
+# A password pasted into a secret often carries a line ending; certificate passwords don't.
+AUTHOR_PASSWORD="${AUTHOR_PASSWORD%$'\n'}"; AUTHOR_PASSWORD="${AUTHOR_PASSWORD%$'\r'}"
+DISTRIBUTOR_PASSWORD="${DISTRIBUTOR_PASSWORD%$'\n'}"; DISTRIBUTOR_PASSWORD="${DISTRIBUTOR_PASSWORD%$'\r'}"
+export AUTHOR_PASSWORD DISTRIBUTOR_PASSWORD
+
+# Check each password opens its certificate first: the Tizen CLI only says "Author password:" and asks again.
+opens() { openssl pkcs12 -noout -nodes -legacy -in "$1" -passin "env:$2" >/dev/null 2>&1 || openssl pkcs12 -noout -nodes -in "$1" -passin "env:$2" >/dev/null 2>&1; }
+if command -v openssl >/dev/null; then
+    opens "$AUTHOR_P12" AUTHOR_PASSWORD || { echo "error: the author password doesn't open $(basename "$AUTHOR_P12")" >&2; exit 1; }
+    opens "$DISTRIBUTOR_P12" DISTRIBUTOR_PASSWORD || { echo "error: the distributor password doesn't open $(basename "$DISTRIBUTOR_P12")" >&2; exit 1; }
+fi
+
 # Only the app files, as build-tv.ps1 stages them
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
@@ -43,7 +55,7 @@ cat > "$data/profile/profiles.xml" <<EOF
 </profiles>
 EOF
 chmod 600 "$data/profile/profiles.xml"
-"$tizen" package -t wgt -s Reelhouse -- "$stage"
+"$tizen" package -t wgt -s Reelhouse -- "$stage" < /dev/null      # never wait for a password prompt
 
 wgt="$(ls "$stage"/*.wgt)"
 mv "$wgt" "$out/"
