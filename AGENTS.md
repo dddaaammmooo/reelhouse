@@ -181,7 +181,7 @@ Re-installing over an existing install keeps the app's localStorage (settings, c
 | `build-tv.ps1` | TV packaging/install script (PowerShell 5.1) |
 | `README.md` | User docs |
 
-Script load order matters (globals): `webapis.js (TV only) → config.js → sounds.js → nav.js → api.js → feeds.js → people.js → plex.js → player.js → app.js`.
+Script load order matters (globals): `webapis.js (TV only) → config.js → sounds.js → nav.js → api.js → feeds.js → people.js → seasons.js → plex.js → player.js → app.js`. Each folder has a README describing its files.
 
 ---
 
