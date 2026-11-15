@@ -664,8 +664,22 @@ When a person is in the banner (Actors screen, Cast pages, an actor's page), the
   - The people either side are prefetched once a strip is found (`prefetchNeighbours`).
   - Measured on a real Cast page: the first strip shows 4.6 s after the page opens (it was ~10 s), the next people's after 1.3–3 s.
   - Every Wikimedia request costs a CORS preflight because of `Api-User-Agent`, which Wikimedia asks browser apps to send.
-- **Lifecycle:** nothing is fetched until you've rested on a person for 0.35 s, the main photo holds for 1.2 s, and the strip is drawn only while the remote is quiet (`whenIdle`). Moving away fades it out and frees the canvas (`width = 0`), which matters on the TV's limited memory: about 3000–5000 × 600 px.
+- **Lifecycle:** nothing is fetched until you've rested on a person for 0.2 s; then all the photos show at once as soon as they've loaded (no hold on the main photo, no pause before moving), and the strip is drawn only while the remote is quiet (`whenIdle`). Moving away fades it out and frees the canvas (`width = 0`), which matters on the TV's limited memory: about 3000–5000 × 600 px.
 - `People` requests to commons.wikimedia.org send `Api-User-Agent` too (allowed by CORS, verified live).
+
+## Player speed, theme loop, picture picker, fixes (15 Nov 2026)
+
+- **Playback speed** (player menu › Playback speed: Normal, 1.25×, 1.5×, 1.75×, 2×; the menu button is now "Options"):
+  - engines have `rate(r)` returning whether it took: HTML5 sets `playbackRate` (pitch kept); AVPlay calls `setSpeed` and re-applies it after a pause or seek;
+  - a refused speed falls back to Normal with "This TV can't play at 2×" in the menu;
+  - `S.speed` is kept across restarts in the same session (quality / audio / subtitle changes).
+  - **Not yet tried on the TV.** Samsung documents `setSpeed` mainly for trick play; some models may refuse 1.25/1.5/1.75 or mute the sound above 1×.
+- **Theme music loops:** on `ended` it restarts and eases over 2 s to 10% less of its starting level (`THEME_STEP`): 90%, 80%… and stops after the tenth loop. Checked in a browser: 0.225 → 0.203 → 0.18 … 0.022 → stopped.
+- **Picture picker "Original":** the first card is the title's own poster (often TheTVDB via Sonarr or the feed, not TVmaze); choosing it deletes the saved choice. `chooseArt` no longer overwrites `item.view.poster`; `chosenArt` applies the choice where pictures are drawn.
+- **No YouTube category:** `channelOf` / `webChannel` in feeds.js ignore TVmaze's "YouTube" web channel, so there's no YouTube streaming row or Publisher tile (`STORE_VERSION` 10).
+- **"Watched … ago"** in Recently played is worked out when the row is shown, from the latest play (`at`). It used to be saved with Plex's history entry and went stale, and Plex only updates `lastViewedAt` when you finish something.
+- **Focus no longer enters closed pop-ups:** they're hidden with `visibility` and keep their layout, so `Nav` candidates now skip anything inside `.sheet:not(.open)`. Up from a Cast page's first row used to land on the closed details pop-up's description, with nothing visible highlighted.
+- **Banner photo strip:** all photos show at once as soon as they're loaded (no hold on the main photo). `.hero-bg.portrait` is now the same 480×600 box as a strip tile, so the main photo no longer jumps in size when the strip appears.
 
 ## GitHub: CI, security scanning, releases (15 Nov 2026)
 

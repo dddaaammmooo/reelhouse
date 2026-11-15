@@ -18,7 +18,7 @@ var Feeds = (function () {
     const DAY = 86400000;
     const ROW_MAX = 30;
     const STORE_KEY = 'medialoader.feed.';
-    const STORE_VERSION = 9;          // 9: publisher (network / studio / label) on each title
+    const STORE_VERSION = 10;       // 10: YouTube is no longer a channel (row / publisher); 9: publisher (network / studio / label) on each title
 
     // Radarr's list API and Apple's Music RSS don't send CORS headers. Tizen apps aren't bound by CORS,
     // but a desktop browser is, so when served over http (the Docker test container) use its proxy.
@@ -91,6 +91,11 @@ var Feeds = (function () {
 
     /* Rows grouped by a field (streaming service, studio): groups with at least `min` titles, the biggest
        `max` groups, in order of size. */
+    // A show's streaming service, else its network. YouTube isn't treated as one: no YouTube row or Publisher tile.
+    const NOT_A_CHANNEL = /^youtube/i;
+    const webChannel = show => { const n = show.webChannel && show.webChannel.name; return n && !NOT_A_CHANNEL.test(n) ? n : ''; };
+    const channelOf = show => webChannel(show) || (show.network && show.network.name) || '';
+
     function groupRows(items, keyOf, min, max, titleOf) {
         const groups = {}, order = [];
         items.forEach(it => {
@@ -297,7 +302,7 @@ var Feeds = (function () {
                 };
                 const desc = ({ show, season, airdate }, upcoming) => {
                     if (memo[show.id]) { return memo[show.id]; }
-                    const net = (show.webChannel && show.webChannel.name) || (show.network && show.network.name) || '';
+                    const net = channelOf(show);
                     const day = airdate ? fmtDate(Date.parse(airdate)) : '';
                     let label;
                     if (upcoming) { label = season > 1 ? 'Season ' + season + ' premieres ' + day : 'New series · starts ' + day; }
@@ -331,10 +336,10 @@ var Feeds = (function () {
                 const airingShows = Object.keys(airing).map(k => airing[k]).sort((a, b) => (b.weight || 0) - (a.weight || 0));
                 const airDesc = show => memo[show.id] || (memo[show.id] = {
                     key: 'tvdb:' + show.externals.thetvdb, src: 'tvdb', ref: show.externals.thetvdb, tvmaze: show.id,
-                    genres: show.genres || [], pub: (show.webChannel && show.webChannel.name) || (show.network && show.network.name) || '',
+                    genres: show.genres || [], pub: channelOf(show),
                     view: {
                         title: show.name,
-                        meta: ['On this week', (show.webChannel && show.webChannel.name) || (show.network && show.network.name) || '',
+                        meta: ['On this week', channelOf(show),
                             (show.genres || []).slice(0, 2).join(', ')].filter(Boolean),
                         poster: show.image ? (show.image.medium || show.image.original) : '',
                         backdrop: '',
@@ -375,7 +380,7 @@ var Feeds = (function () {
                 TV_GENRES.forEach((g, i) => book.add(g[1], (genreCharts[i] || []).map(itv)));
 
                 // Rows per streaming service (TVmaze's "web channel": Netflix, Apple TV+, Prime Video…), busiest first.
-                const services = groupRows(airingShows, sh => sh.webChannel && sh.webChannel.name, 4, 6, n => n).map(r => ({ title: r.title, items: r.items.map(airDesc) }));
+                const services = groupRows(airingShows, webChannel, 4, 6, n => n).map(r => ({ title: r.title, items: r.items.map(airDesc) }));
                 const result = rows([
                     { title: 'New series this week', items: recentDescs.filter((d, i) => recent[i].season === 1) },
                     { title: 'Returning this week', items: recentDescs.filter((d, i) => recent[i].season > 1) },
@@ -552,7 +557,7 @@ var Feeds = (function () {
             genres: show.genres || [],
             view: {
                 title: show.name,
-                meta: [show.premiered ? show.premiered.slice(0, 4) : '', (show.webChannel && show.webChannel.name) || (show.network && show.network.name) || '',
+                meta: [show.premiered ? show.premiered.slice(0, 4) : '', channelOf(show),
                     (show.genres || []).slice(0, 2).join(', ')].filter(Boolean),
                 poster: show.image ? (show.image.medium || show.image.original) : '',
                 backdrop: '',

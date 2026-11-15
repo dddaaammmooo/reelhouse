@@ -535,7 +535,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round
 /* No mask and no slow zoom here: on the TV a masked layer that's animating repaints every frame and flickers.
    The edges fade with a plain gradient overlay instead. */
 .hero-bg.portrait {
-    width: 400px; right: 160px; background-position: center top;
+    width: 480px; right: 120px; background-position: center top;    /* the same box as a filmstrip tile (STRIP in app.js), so the photo doesn't jump when the strip appears */
     transform: none; transition: opacity .5s ease;
 }
 .hero-bg.portrait::after {
@@ -546,7 +546,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round
 /* A person's photos as a slow filmstrip across the whole banner (personStrip in app.js): drawn once into a canvas
    that's moved with a transform. It sits above the banner's scrim and brings its own lighter one, so the photos
    show right across while the name and biography stay readable. */
-.hero-strip { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; opacity: 0; transition: opacity 1s ease; }
+.hero-strip { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; opacity: 0; transition: opacity .5s ease; }
 .hero-strip.show { opacity: 1; }
 .hero-strip canvas { position: absolute; top: 0; left: 0; }
 .hero-strip::after {
@@ -782,6 +782,8 @@ html.playing #app { visibility: hidden; }
 .art-track { display: flex; transition: transform .35s var(--ease); }
 .art-card { flex-shrink: 0; width: 220px; height: 330px; margin-right: var(--s-md); border: 0; border-radius: 12px; background: var(--surface-2) center/cover no-repeat;
     position: relative; transition: transform .2s var(--ease), box-shadow .2s; }
+.art-card .art-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 12px 12px; border-radius: 0 0 12px 12px;
+    background: linear-gradient(0deg, rgba(10,10,13,.85), rgba(10,10,13,0)); color: var(--text); font-size: 20px; font-weight: 700; text-align: left; }
 .art-card.focused { transform: scale(1.06); box-shadow: 0 0 0 4px var(--text), 0 12px 30px rgba(0,0,0,.5); }
 .art-card.chosen::after { content: '\2713'; position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border-radius: 50%;
     background: var(--accent); color: #fff; font-size: 24px; font-weight: 700; line-height: 40px; text-align: center; }

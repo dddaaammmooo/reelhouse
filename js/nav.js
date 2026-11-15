@@ -36,7 +36,9 @@ var Nav = (function () {
         const add = root => {
             if (!root) { return; }
             const all = root.querySelectorAll('.focusable');
-            for (let i = 0; i < all.length; i++) { if (isVisible(all[i])) { out.push(all[i]); } }
+            // Closed pop-ups are hidden with visibility (they keep their layout), so skip their contents explicitly:
+            // otherwise Up from a Cast page's first row landed on the closed details pop-up's description.
+            for (let i = 0; i < all.length; i++) { if (isVisible(all[i]) && !all[i].closest('.sheet:not(.open)')) { out.push(all[i]); } }
         };
         const sheet = openSheet();
         if (sheet) { add(sheet); return out; }          // a modal panel traps focus

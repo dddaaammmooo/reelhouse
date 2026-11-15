@@ -209,7 +209,7 @@
         else if (kind === 'tv') { ref = guid('tvdb'); src = ref ? 'tvdb' : 'seriesTitle'; ref = ref ? +ref : m.title; }
         else { src = 'artist'; ref = m.title; }
         return { key: recentKey(src, ref), src, ref, year: m.year, kind, genres: (m.Genre || []).map(g => g.tag), at: (m.lastViewedAt || 0) * 1000,
-            view: { title: m.title, meta: [m.year ? String(m.year) : '', 'Watched ' + ago(m.lastViewedAt * 1000)].filter(Boolean),
+            view: { title: m.title, meta: [m.year ? String(m.year) : ''].filter(Boolean),     // "Watched …" is added when shown
                 poster: Plex.photo(m.thumb, 342, 513), backdrop: m.art ? Plex.photo(m.art, 1280, 720) : '', overview: String(m.summary || '').slice(0, 400) } };
     }
 
@@ -287,6 +287,12 @@
     function showRecent(kind) {
         const s = state.search[kind];
         s.recent = (recentStore[kind] || []).length ? Feeds.hydrate([{ title: '', items: recentStore[kind] }])[0].items : [];
+        // "Watched …" from the latest play (yours here or Plex's history), worked out now rather than saved: a saved
+        // label went stale, and Plex only updates its time when you finish something.
+        s.recent.forEach((it, i) => {
+            const at = recentStore[kind][i] && recentStore[kind][i].at;
+            it.view.meta = (it.view.meta || []).filter(x => !/^Watched /.test(x)).concat(at ? ['Watched ' + ago(at)] : []);
+        });
         // Refresh the screen only if you're on it and haven't moved off the first poster (so nothing jumps under you).
         const onScreen = state.kind === kind && state.screen === 'search' && !state.dlMode && !s.similar && !s.term;
         const cur = Nav.current();
@@ -926,17 +932,16 @@
        where the single portrait sits, holds for a moment, and comes round again after the others. ---- */
     const STRIP = {
         tile: 480, blend: 160, height: 600,     // each photo 480x600; neighbours overlap by 160px and cross-fade
-        view: 1920, mainX: 1560,                // the strip fills the banner; the portrait's centre (right: 160px, 400 wide)
+        view: 1920, mainX: 1560,                // the strip fills the banner; the portrait's centre (.hero-bg.portrait: right 120px, 480 wide)
         speed: 22,                              // px per second
-        hold: 1200,                             // the main photo alone first, then the strip fades in
-        rest: 350                               // how long to rest on a person before fetching their photos
+        rest: 200                               // how long to rest on a person before fetching their photos
     };
     let stripItem = null, stripGen = 0;
     function personStrip(h) {
         const item = h.portrait && h.card ? itemOf(h.card) : null;
         if (item === stripItem) { return; }
         stripItem = item;
-        const gen = ++stripGen, shownAt = Date.now();
+        const gen = ++stripGen;
         hideStrip();
         People.focus(item && item._person.name);       // their lookups jump the Wikimedia queue
         if (!item) { return; }
@@ -948,10 +953,8 @@
                 return gen === stripGen && urls.length > 1 ? loadPhotos(urls) : [];
             }).then(imgs => {
                 if (gen !== stripGen || imgs.length < 2) { return; }
-                whenIdle(() => {
-                    if (gen !== stripGen) { return; }
-                    setTimeout(() => { if (gen === stripGen) { showStrip(imgs); } }, Math.max(0, STRIP.hold - (Date.now() - shownAt)));
-                });
+                // All the photos at once, as soon as they're loaded (drawn once the remote is briefly quiet).
+                whenIdle(() => { if (gen === stripGen) { showStrip(imgs); } }, 200);
             }).catch(() => {});
         }, STRIP.rest);
     }
@@ -1052,7 +1055,7 @@
         box.classList.add('show');
         if (cv.animate) {
             cv._anim = cv.animate([{ transform: 'translate3d(' + start + 'px,0,0)' }, { transform: 'translate3d(' + (start - loop) + 'px,0,0)' }],
-                { duration: loop / STRIP.speed * 1000, delay: 1000, iterations: Infinity, easing: 'linear' });
+                { duration: loop / STRIP.speed * 1000, iterations: Infinity, easing: 'linear' });
         }
     }
     function dropStrip(box) {
@@ -1608,14 +1611,20 @@
         if (!info || !info.posters) { return; }
         state.art = { info, returnTo: $('in-art') };
         $('art-title').textContent = viewOf(info.kind, info.item).title;
-        const track = $('art-track'), current = artChoice[info.artKey] || viewOf(info.kind, info.item).poster;
+        // The title's own poster comes first as "Original" (it's often from TheTVDB or the feed, not TVmaze), so a
+        // choice can always be undone.
+        const original = viewOf(info.kind, info.item).poster;
+        const choices = (original ? [{ medium: original, original, isOriginal: true }] : [])
+            .concat(info.posters.filter(p => p.medium !== original && p.original !== original));
+        const track = $('art-track'), current = artChoice[info.artKey] || original;
         track.innerHTML = '';
         track.style.transform = 'translate3d(0,0,0)';
         let focusCard = null;
-        info.posters.forEach((img, i) => {
+        choices.forEach((img, i) => {
             const c = el('button', 'art-card focusable');
             c._img = img;
             c.style.backgroundImage = cssUrl(img.medium);
+            if (img.isOriginal) { c.innerHTML = '<span class="art-label">Original</span>'; }
             if (img.medium === current || img.original === current) { c.classList.add('chosen'); focusCard = c; }
             c.addEventListener('click', () => chooseArt(img));
             track.appendChild(c);
@@ -1632,16 +1641,16 @@
         const a = state.art;
         if (!a) { return; }
         const info = a.info;
-        artChoice[info.artKey] = img.medium;
+        // The choice is kept separately (chosenArt); the title's own poster stays as it is, for "Original".
+        if (img.isOriginal) { delete artChoice[info.artKey]; } else { artChoice[info.artKey] = img.medium; }
         try { localStorage.setItem(ART_KEY, JSON.stringify(artChoice)); } catch (e) { /* not saved */ }
-        if (info.item.view) { info.item.view.poster = img.medium; }
         $('in-poster').style.backgroundImage = cssUrl(img.original || img.medium);
         Array.prototype.forEach.call($('results-rows').querySelectorAll('.card'), c => {
             if (c._item && (c._item === info.item || (c._item.key && c._item.key === info.artKey))) {
                 c._poster = img.medium; c._posterShown = null; showPoster(c);
             }
         });
-        toast('Picture changed', 'ok');
+        toast(img.isOriginal ? 'Original picture back' : 'Picture changed', 'ok');
         closeArt();
     }
 
@@ -1748,9 +1757,21 @@
         return true;
     }
 
-    /* ---- Theme music (as in Plex): a title's theme plays softly while its details are open ---- */
+    /* ---- Theme music (as in Plex): a title's theme plays softly while its details are open. It loops, each time
+       round easing 10% lower (90%, 80%... of its starting level), and stops once it's silent. ---- */
     const themeAudio = new Audio();
-    let themeFor = null, themeFade = null;
+    let themeFor = null, themeFade = null, themeLoops = 0;
+    const THEME_STEP = 0.1;                       // each loop is this much (of the starting level) quieter
+    themeAudio.addEventListener('ended', () => {
+        if (!themeFor) { return; }
+        themeLoops++;
+        const level = themeLevel() * Math.max(0, 1 - THEME_STEP * themeLoops);
+        if (level <= 0.001) { stopTheme(true); return; }
+        themeAudio.currentTime = 0;
+        const p = themeAudio.play();
+        if (p && p.catch) { p.catch(() => {}); }
+        fadeTheme(level, 2000);
+    });
     function fadeTheme(target, ms, done) {
         clearInterval(themeFade);
         const from = themeAudio.volume, steps = Math.max(1, Math.round(ms / 50));
@@ -1766,6 +1787,7 @@
         Plex.findItem(info.kind, real).then(m => {
             if (!m || !m.theme || state.info !== info || Player.isOpen()) { return; }
             themeFor = info;
+            themeLoops = 0;
             themeAudio.src = Plex.base() + m.theme + '?X-Plex-Token=' + encodeURIComponent(Plex.token());
             themeAudio.volume = 0;
             const p = themeAudio.play();
