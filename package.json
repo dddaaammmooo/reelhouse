@@ -12,6 +12,6 @@
     "coverage": "c8 --reporter=text --reporter=lcov --include=js/** node --test \"tests/unit/*.test.js\""
   },
   "devDependencies": {
-    "c8": "^10.1.3"
+    "c8": "^12.0.0"
   }
 }
