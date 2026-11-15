@@ -890,7 +890,9 @@
 
         // Crossfade the backdrop, debounced so holding an arrow doesn't load every image.
         clearTimeout(bgTimer);
-        bgTimer = setTimeout(() => setBackdrop(h.backdrop || null, !!h.portrait), 220);
+        // People get only the scrolling photo strip (personStrip), never a single photo first: swapping one for the
+        // other flashed. Their banner stays empty until the strip is ready.
+        bgTimer = setTimeout(() => setBackdrop(h.portrait ? null : (h.backdrop || null), false), 220);
         personStrip(h);
     }
 
@@ -950,9 +952,9 @@
             if (gen !== stripGen) { return; }
             People.gallery(item).then(urls => {
                 prefetchNeighbours(h.card);
-                return gen === stripGen && urls.length > 1 ? loadPhotos(urls) : [];
+                return gen === stripGen && urls.length ? loadPhotos(urls) : [];
             }).then(imgs => {
-                if (gen !== stripGen || imgs.length < 2) { return; }
+                if (gen !== stripGen || !imgs.length) { return; }      // one photo still scrolls, repeated
                 // All the photos at once, as soon as they're loaded (drawn once the remote is briefly quiet).
                 whenIdle(() => { if (gen === stripGen) { showStrip(imgs); } }, 200);
             }).catch(() => {});
@@ -965,11 +967,12 @@
             const it = c && c.classList.contains('card') ? itemOf(c) : null;
             if (!it || !it._person || it._galleryWarm) { return; }
             it._galleryWarm = true;
-            whenIdle(() => People.gallery(it).then(urls => urls.slice(1).forEach(u => { new Image().src = u; })).catch(() => {}));
+            // Fetched the way the strip loads them (CORS), or the browser caches them separately and loads them again.
+            whenIdle(() => People.gallery(it).then(urls => urls.forEach(u => { const img = new Image(); img.crossOrigin = 'anonymous'; img.src = u; })).catch(() => {}));
         });
     }
     /* Loaded images in order, without copies of the same picture (TMDb, TVmaze and Wikimedia often have the same
-       photo under different names); none at all if the main photo fails (the strip must start on it). Images are
+       photo under different names). Images are
        fetched with CORS (all three hosts allow it) so their pixels can be compared; a host that refuses gets a
        plain load and is kept unchecked. */
     const STRIP_MAX = 6;
@@ -1006,7 +1009,6 @@
     const samePicture = (a, b) => { let diff = 0; for (let i = 0; i < 64; i++) { diff += a[i] !== b[i] ? 1 : 0; } return diff <= 10; };
     function loadPhotos(urls) {
         return Promise.all(urls.map(u => loadPhoto(u, true))).then(list => {
-            if (!list[0]) { return []; }
             const kept = [], prints = [];
             list.forEach(img => {
                 if (!img || kept.length >= STRIP_MAX) { return; }

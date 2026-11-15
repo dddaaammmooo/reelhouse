@@ -679,7 +679,7 @@ When a person is in the banner (Actors screen, Cast pages, an actor's page), the
 - **No YouTube category:** `channelOf` / `webChannel` in feeds.js ignore TVmaze's "YouTube" web channel, so there's no YouTube streaming row or Publisher tile (`STORE_VERSION` 10).
 - **"Watched … ago"** in Recently played is worked out when the row is shown, from the latest play (`at`). It used to be saved with Plex's history entry and went stale, and Plex only updates `lastViewedAt` when you finish something.
 - **Focus no longer enters closed pop-ups:** they're hidden with `visibility` and keep their layout, so `Nav` candidates now skip anything inside `.sheet:not(.open)`. Up from a Cast page's first row used to land on the closed details pop-up's description, with nothing visible highlighted.
-- **Banner photo strip:** all photos show at once as soon as they're loaded (no hold on the main photo). `.hero-bg.portrait` is now the same 480×600 box as a strip tile, so the main photo no longer jumps in size when the strip appears.
+- **Banner photo strip:** people get only the strip, never a single portrait first (swapping one for the other flashed). Their banner stays dark until it's ready, about 1.4–3.9 s with nothing cached, and a person with one photo gets it repeating. Neighbour prefetch now loads with CORS, or the browser cached a second copy and the strip loaded them again.
 
 ## GitHub: CI, security scanning, releases (15 Nov 2026)
 
